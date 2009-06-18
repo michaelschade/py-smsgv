@@ -9,7 +9,7 @@ from re import compile
 timeConstrain = compile("now|\d{1,2} (seconds?|minutes?) ago|(1?\d|2[0-4]) hours? ago")
 
 #last_check = "2:28 PM"
-class User():
+class GVAccount():
     """A representation of the user to handle their login, cookies, and message sending and receiving."""
     def __init__(self, username, password):
         self.username = username
@@ -56,18 +56,20 @@ class User():
                 for timestamp in message_parent.find_class("ms"):
                     if timestamp.getparent().get("class") is None and timeConstrain.match(timestamp.text.strip(" ()")):
                         for piece in unread_message.find_class("ms"): # Class denotes a timestamp
+                            time = self.__convertTime(piece.text.strip(" ()"))
                             if self.initialized:
                                 for sender in piece.getprevious().getprevious().find_class("sf"): # Class denotes the sender field
+                                    sender = sender.text_content().strip(' \n').strip(' ')
                                     # We only want the sender's messages and we want it to make sure it has not been previously retrieved
-                                    if sender.text_content().strip(' \n').strip(' ') == "Me:" or int(self.__convertTime(piece.text.strip(" ()"))) <= int(self.lastTime):
+                                    if sender == "Me:" or int(time) <= int(self.lastTime):
                                         break
                                     else:
                                         # The first time through, we do not desire to parse messages, but to find a time base for which to determine whether or not a new message should be sent.
-                                        print " %s %s" % (piece.getprevious().text, piece.text.strip(" ()"))
+                                        print "%s %s %s (%s)" % (sender, piece.getprevious().text, piece.text.strip(" ()"), (self.lastTime)) #self.__uplevel(piece, 3).get("id"))
                                         message_ids.add(self.__uplevel(piece, 3).get("id"))
-                            if piece.getparent().getnext().getnext() is None:
-                                # This appears to be the latest message (at least from the conversation), so we will use it as the basis for checking for new text messages.
-                                self.lastTime = self.__convertTime(piece.text.strip(" ()"))
+                            if piece.getparent().getnext().getnext() is None and self.__uplevel(piece, 3).getprevious().getprevious().getprevious() is None and (int(time) > int(self.lastTime)): # Sorry for it being messy, but we only want to use the latest message as a time baseline.
+                                # This appears to be the latest message (at least from the conversation), so we will use it as the basis for checking for new text messages
+                                self.lastTime = time
         if not self.initialized: self.initialized = True
         return message_ids # returns set of ids that were parsed
     
@@ -107,6 +109,6 @@ class User():
         urlopen(Request(SMSSEND_URL, form, {'Content-type': 'application/x-www-form-urlencoded'}))
 
 # Also for testing purposes
-x = User(USER, PASS)
+x = GVAccount(USER, PASS)
 x.login()
 x.smsCheck()
