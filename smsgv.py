@@ -14,9 +14,21 @@ class User():
     def __init__(self, username, password):
         self.username = username
         self.password = password
-        self.lastMessage = None
+        self.lastTime = "0" # A failsafe in case no other message can set the baseline.
         self.uid = None # Google has a special little id that they require is included in sending messages
         self.loggedIn = False
+        self.initialized = False
+    
+    def __convertTime(self, time):
+        """Converts the time format produced by Google to a HHMM 24-hour style for comparisons."""
+        # Format of the original time: x?x:xx (A|P)M
+        time = time.split(':') # yields ('x?x', 'xx (A|P)M')
+        newTime = ""
+        # Set the hours to a 24-hour format
+        if time[1].split(' ')[1] == "PM": newTime = str(int(time[0]) + 12)
+        else: newTime = "%.2d" % int(time[0])
+        newTime += time[1].split(' ')[0] # minutes
+        return newTime
     
     def __markRead(self, conversation_ids):
         # Each conversation has its own id, so we can pass that via GET to mark it as read.
@@ -35,7 +47,7 @@ class User():
         from lxml import html
         parsed_html = html.fromstring(sms_page.read())
         if self.uid is None: self.uid = parsed_html.forms[0].inputs["_rnr_se"].value
-        message_ids = set()
+        message_ids = set() # sets allow for unique data, we don't need to request something for a conversation more than once
         
         # We're only looking for new messages
         for unread_message in parsed_html.find_class("ms3"): # Class denotes a message object within a conversation
@@ -44,14 +56,19 @@ class User():
                 for timestamp in message_parent.find_class("ms"):
                     if timestamp.getparent().get("class") is None and timeConstrain.match(timestamp.text.strip(" ()")):
                         for piece in unread_message.find_class("ms"): # Class denotes a timestamp
-                            for sender in piece.getprevious().getprevious().find_class("sf"): # Class denotes the sender field
-                                # We only want the sender's messages
-                                if sender.text_content().strip(' ').strip('\n').strip(' ') == "Me:": # Clean up the format for checking. Is there a prettier way to do this?
-                                    break
-                                else:
-                                    # get the message time from here
-                                    print " %s\n%s" % (piece.getprevious().text, piece.text.strip(" ()"))
-                                    message_ids.add(self.__uplevel(piece, 3).get("id"))
+                            if self.initialized:
+                                for sender in piece.getprevious().getprevious().find_class("sf"): # Class denotes the sender field
+                                    # We only want the sender's messages and we want it to make sure it has not been previously retrieved
+                                    if sender.text_content().strip(' \n').strip(' ') == "Me:" or int(self.__convertTime(piece.text.strip(" ()"))) <= int(self.lastTime):
+                                        break
+                                    else:
+                                        # The first time through, we do not desire to parse messages, but to find a time base for which to determine whether or not a new message should be sent.
+                                        print " %s %s" % (piece.getprevious().text, piece.text.strip(" ()"))
+                                        message_ids.add(self.__uplevel(piece, 3).get("id"))
+                            if piece.getparent().getnext().getnext() is None:
+                                # This appears to be the latest message (at least from the conversation), so we will use it as the basis for checking for new text messages.
+                                self.lastTime = self.__convertTime(piece.text.strip(" ()"))
+        if not self.initialized: self.initialized = True
         return message_ids # returns set of ids that were parsed
     
     def login(self):
