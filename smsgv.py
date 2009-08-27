@@ -2,14 +2,16 @@ from settings import USER, PASS # For testing purposes
 
 LOGIN_URL = "https://www.google.com/accounts/ServiceLoginAuth?service=grandcentral"
 MARK_READ_URL = "https://www.google.com/voice/m/mark?read=1&id="
-SMSLIST_URL = "https://www.google.com/voice/m/i/sms"
+SMSLIST_URL = "https://www.google.com/voice/inbox/recent/sms" # We use the main website because Google includes helpful data stored via JSON here
+# SMSLIST_URL = "https://www.google.com/voice/m/i/sms"
 SMSSEND_URL = "https://www.google.com/voice/m/sendsms"
 
 from re import compile
 timeConstrain = compile("now|\d{1,2} (seconds?|minutes?) ago|(1?\d|2[0-4]) hours? ago")
 
-#last_check = "2:28 PM"
-class GVAccount():
+# Todo: Add multiple pages of messages support
+
+class GVAccount:
     """A representation of the user to handle their login, cookies, and message sending and receiving."""
     def __init__(self, username, password):
         self.username = username
@@ -18,6 +20,10 @@ class GVAccount():
         self.uid = None # Google has a special little id that they require is included in sending messages
         self.loggedIn = False
         self.initialized = False
+        print "Logging in..."
+        self.login()
+        # print "Making initial SMS check..."
+        # self.smsCheck()
     
     def __convertTime(self, time):
         """Converts the time format produced by Google to a HHMM 24-hour style for comparisons."""
@@ -44,37 +50,59 @@ class GVAccount():
     
     def __smsParse(self, sms_page):
         """Parses the HTML received from Google's servers to receive only the relevant messages."""
-        from lxml import html
-        parsed_html = html.fromstring(sms_page.read())
-        if self.uid is None: self.uid = parsed_html.forms[0].inputs["_rnr_se"].value
-        message_ids = set() # sets allow for unique data, we don't need to request something for a conversation more than once
-        
-        # We're only looking for new messages
-        for unread_message in parsed_html.find_class("ms3"): # Class denotes a message object within a conversation
-            message_parent = unread_message.getparent()
-            if message_parent.get("class") == "mu": # Class denotes an unread message
-                for timestamp in message_parent.find_class("ms"):
-                    if timestamp.getparent().get("class") is None and timeConstrain.match(timestamp.text.strip(" ()")):
-                        for piece in unread_message.find_class("ms"): # Class denotes a timestamp
-                            time = self.__convertTime(piece.text.strip(" ()"))
-                            if self.initialized:
-                                for sender in piece.getprevious().getprevious().find_class("sf"): # Class denotes the sender field
-                                    sender = sender.text_content().strip(' \n').strip(' ')
-                                    # We only want the sender's messages and we want it to make sure it has not been previously retrieved
-                                    if sender == "Me:" or int(time) <= int(self.lastTime):
-                                        break
-                                    else:
-                                        # The first time through, we do not desire to parse messages, but to find a time base for which to determine whether or not a new message should be sent.
-                                        print "%s %s %s (%s)" % (sender, piece.getprevious().text, piece.text.strip(" ()"), (self.lastTime)) #self.__uplevel(piece, 3).get("id"))
-                                        message_ids.add(self.__uplevel(piece, 3).get("id"))
-                            if piece.getparent().getnext().getnext() is None and self.__uplevel(piece, 3).getprevious().getprevious().getprevious() is None and (int(time) > int(self.lastTime)): # Sorry for it being messy, but we only want to use the latest message as a time baseline.
-                                # This appears to be the latest message (at least from the conversation), so we will use it as the basis for checking for new text messages
-                                self.lastTime = time
+        from lxml import etree, html
+        parser = etree.XMLParser(strip_cdata=False) # Google likes to store their information in CDATA, so we have to tell the parser this
+        parsed_html = html.document_fromstring(sms_page.read(), parser)
+        message_ids = set()
+        import cjson
+        json = cjson.decode(parsed_html.find('.json').text)
+        # We only want to get relevant conversations
+        for key, value in json['messages'].iteritems():
+            # Check if unread and within the past twenty-four hours
+            from time import time
+            value['startTime'] = float(value['startTime'])/1000
+            # Checks for multiple things:
+            #   - Message is a SMS in the inbox
+            #   - Message is unread
+            #   - Message is within the past 24 hours
+            if not value['isRead'] and (time() - value['startTime'] < 86400) and ('sms' in value['labels']) and ('inbox' in value['labels']):
+                message_ids.add(key)
+                print "Message ID: %d" % int(str(value['startTime'])[:-3])
         if not self.initialized: self.initialized = True
-        return message_ids # returns set of ids that were parsed
+        return message_ids
+        
+        # from lxml import html
+        # parsed_html = html.fromstring(sms_page.read())
+        # if self.uid is None: self.uid = parsed_html.forms[0].inputs["_rnr_se"].value
+        # message_ids = set() # sets allow for unique data, we don't need to request something for a conversation more than once
+        # 
+        # # We're only looking for new messages
+        # for unread_message in parsed_html.find_class("ms3"): # Class denotes a message object within a conversation
+        #     message_parent = unread_message.getparent()
+        #     if message_parent.get("class") == "mu": # Class denotes an unread message
+        #         for timestamp in message_parent.find_class("ms"):
+        #             if timestamp.getparent().get("class") is None and timeConstrain.match(timestamp.text.strip(" ()")):
+        #                 for piece in unread_message.find_class("ms"): # Class denotes a timestamp
+        #                     time = self.__convertTime(piece.text.strip(" ()"))
+        #                     if self.initialized:
+        #                         for sender in piece.getprevious().getprevious().find_class("sf"): # Class denotes the sender field
+        #                             sender = sender.text_content().strip(' \n').strip(' ')
+        #                             # We only want the sender's messages and we want it to make sure it has not been previously retrieved
+        #                             if sender == "Me:" or int(time) <= int(self.lastTime):
+        #                                 break
+        #                             else:
+        #                                 # The first time through, we do not desire to parse messages, but to find a time base for which to determine whether or not a new message should be sent.
+        #                                 print "%s %s %s (%s)" % (sender, piece.getprevious().text, piece.text.strip(" ()"), (self.lastTime)) #self.__uplevel(piece, 3).get("id"))
+        #                                 message_ids.add(self.__uplevel(piece, 3).get("id"))
+        #                     if piece.getparent().getnext().getnext() is None and self.__uplevel(piece, 3).getprevious().getprevious().getprevious() is None and (int(time) > int(self.lastTime)): # Sorry for it being messy, but we only want to use the latest message as a time baseline.
+        #                         # This appears to be the latest message (at least from the conversation), so we will use it as the basis for checking for new text messages
+        #                         self.lastTime = time
+        # if not self.initialized: self.initialized = True
+        # return message_ids # returns set of ids that were parsed
     
     def login(self):
-        """Logs into the Google Account system and receives the cookies into a file to allow continued use of the Google Voice system."""
+        """Logs into the Google Account system and receives the cookies into a
+        file to allow continued use of the Google Voice system."""
         if not self.loggedIn:# We don't need to repeat this process over and over
             from urllib2 import HTTPCookieProcessor, build_opener, install_opener, Request, urlopen
             from cookielib import LWPCookieJar
@@ -96,7 +124,8 @@ class GVAccount():
         """Retrieves the SMS messages from Google's servers to pass to the Parse function."""
         from urllib2 import Request, urlopen
         handle = urlopen(Request(SMSLIST_URL))
-        self.__markRead(self.__smsParse(handle))
+        return self.__smsParse(handle)
+        # self.__markRead(self.__smsParse(handle))
     
     def smsSend(self, number, message):
         from urllib2 import Request, urlopen
@@ -105,10 +134,12 @@ class GVAccount():
             'number': number,
             'smstext': message,
             '_rnr_se': self.uid,
+            # IMPORTANT! We MUST get this self.uid from somewhere, probably the mobile site.
+            # if self.uid is None: self.uid = parsed_html.forms[0].inputs["_rnr_se"].value
         })
         urlopen(Request(SMSSEND_URL, form, {'Content-type': 'application/x-www-form-urlencoded'}))
 
 # Also for testing purposes
 x = GVAccount(USER, PASS)
-x.login()
-x.smsCheck()
+from lxml import html
+z = x.smsCheck()
