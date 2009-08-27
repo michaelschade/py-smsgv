@@ -3,7 +3,7 @@ from settings import USER, PASS # For testing purposes
 LOGIN_URL = "https://www.google.com/accounts/ServiceLoginAuth?service=grandcentral"
 MARK_READ_URL = "https://www.google.com/voice/m/mark?read=1&id="
 SMSLIST_URL = "https://www.google.com/voice/inbox/recent/sms" # We use the main website because Google includes helpful data stored via JSON here
-# SMSLIST_URL = "https://www.google.com/voice/m/i/sms"
+SMSLIST_M_URL = "https://www.google.com/voice/m/i/sms"
 SMSSEND_URL = "https://www.google.com/voice/m/sendsms"
 
 from re import compile
@@ -58,7 +58,7 @@ class GVAccount:
         from lxml import etree, html
         parser = etree.XMLParser(strip_cdata=False) # Google likes to store their information in CDATA, so we have to tell the parser this
         parsed_html = html.document_fromstring(sms_page.read(), parser)
-        message_ids = set()
+        message_ids = {}
         import cjson
         json = cjson.decode(parsed_html.find('.json').text)
         # We only want to get relevant conversations
@@ -77,7 +77,11 @@ class GVAccount:
                 if int(value['startTime']) > self.last_time:
                     self.last_time = value['startTime']
                     if self.initialized:
-                        message_ids.add(key)
+                        if key not in message_ids:
+                            pass # Should not need to do anything if id already indexed
+                        else:
+                            # Later switch to tuple to store phone number and conversation notes?
+                            message_ids[key] = value['phoneNumber']
                         print value
                         print "Message ID: %s" % key
         if not self.initialized: self.initialized = True
@@ -130,7 +134,16 @@ class GVAccount:
                 'PersistentCookies': 'yes',
             })
             urlopen(Request(LOGIN_URL, form, {'Content-type': 'application/x-www-form-urlencoded'}))
-            self.loggedIn = Trues
+            self.loggedIn = True
+            self.__find_account_id()
+    
+    def __find_account_id(self):
+        if self.uid is None:
+            from urllib2 import Request, urlopen
+            handle = urlopen(Request(SMSLIST_M_URL))
+            from lxml import html
+            parsed_html = html.fromstring(handle.read())
+            self.uid = parsed_html.forms[0].inputs["_rnr_se"].value
     
     def smsCheck(self):
         """Retrieves the SMS messages from Google's servers to pass to the Parse function."""
@@ -152,5 +165,5 @@ class GVAccount:
 
 # Also for testing purposes
 x = GVAccount(USER, PASS)
-from lxml import html
-z = x.smsCheck()
+# from lxml import html
+# z = x.smsCheck()
