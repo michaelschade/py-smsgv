@@ -16,7 +16,7 @@ class GVAccount:
     def __init__(self, username, password):
         self.username = username
         self.password = password
-        self.lastTime = "0" # A failsafe in case no other message can set the baseline.
+        self.last_time = 0 # A failsafe in case no other message can set the baseline.
         self.uid = None # Google has a special little id that they require is included in sending messages
         self.loggedIn = False
         self.initialized = False
@@ -25,6 +25,7 @@ class GVAccount:
         # print "Making initial SMS check..."
         # self.smsCheck()
     
+    # Potentially needs removal
     def __convertTime(self, time):
         """Converts the time format produced by Google to a HHMM 24-hour style for comparisons."""
         # Format of the original time: x?x:xx (A|P)M
@@ -38,13 +39,17 @@ class GVAccount:
     
     def __markRead(self, conversation_ids):
         # Each conversation has its own id, so we can pass that via GET to mark it as read.
-        """ Takes a list of conversation ids and makes GET requests to Google's httpd to mark them as read conversations."""
+        """ Takes a list of conversation ids and makes GET requests to Google's
+        httpd to mark them as read conversations."""
         for cid in conversation_ids:
             from urllib2 import Request, urlopen
+            print "Marking %s as read" % cid
             urlopen(Request(MARK_READ_URL + cid))
     
+    # Potentially needs removal
     def __uplevel(self, tree, levels):
-        """Given the nature of having to traverse the DOM, this function will serve to shorten the rest of the code from repetitive getparent() calls."""
+        """Given the nature of having to traverse the DOM, this function will
+        serve to shorten the rest of the code from repetitive getparent() calls."""
         if levels == 1: return tree.getparent()
         else: return self.__uplevel(tree.getparent(), levels-1)
     
@@ -60,14 +65,21 @@ class GVAccount:
         for key, value in json['messages'].iteritems():
             # Check if unread and within the past twenty-four hours
             from time import time
+            # Google's precision goes to the thousandths
             value['startTime'] = float(value['startTime'])/1000
             # Checks for multiple things:
             #   - Message is a SMS in the inbox
             #   - Message is unread
             #   - Message is within the past 24 hours
             if not value['isRead'] and (time() - value['startTime'] < 86400) and ('sms' in value['labels']) and ('inbox' in value['labels']):
-                message_ids.add(key)
-                print "Message ID: %d" % int(str(value['startTime'])[:-3])
+                # If not initialized, then the -very- last message sent is
+                # found. This is used when later detecting new messages.
+                if int(value['startTime']) > self.last_time:
+                    self.last_time = value['startTime']
+                    if self.initialized:
+                        message_ids.add(key)
+                        print value
+                        print "Message ID: %s" % key
         if not self.initialized: self.initialized = True
         return message_ids
         
@@ -118,14 +130,13 @@ class GVAccount:
                 'PersistentCookies': 'yes',
             })
             urlopen(Request(LOGIN_URL, form, {'Content-type': 'application/x-www-form-urlencoded'}))
-            self.loggedIn = True
+            self.loggedIn = Trues
     
     def smsCheck(self):
         """Retrieves the SMS messages from Google's servers to pass to the Parse function."""
         from urllib2 import Request, urlopen
         handle = urlopen(Request(SMSLIST_URL))
-        return self.__smsParse(handle)
-        # self.__markRead(self.__smsParse(handle))
+        self.__markRead(self.__smsParse(handle))
     
     def smsSend(self, number, message):
         from urllib2 import Request, urlopen
