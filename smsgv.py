@@ -101,7 +101,7 @@ class GVAccount:
             # print conversation[-2].get('class')
             # print conversation[-3][-1].get('class')
             message_count = len(conversation) - 1
-            if conversation[2].get('class') == 'gc-message-sms-old':
+            if len(conversation) > 2 and conversation[2].get('class') == 'gc-message-sms-old':
                 conversation_hidden = True
                 message_count       += len(conversation[2]) - 1
                 message_count       = range(message_count)
@@ -113,7 +113,7 @@ class GVAccount:
                 message_count       = temp_count
             else:
                 conversation_hidden = False
-                message_count = range(message_count)
+                message_count = range(message_count+1)
             for mid in message_count:
                 if type(mid) is type([]):
                     for second_mid in mid:
