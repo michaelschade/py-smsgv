@@ -91,6 +91,7 @@ class GVAccount:
         message_ids = self.__id_gather(parsed_html) # Also sets initialized to true if necessary
         messages = []
         for cid in message_ids:
+            print '----------------------------------------------------'
             # Traverses down the DOM to get to the proper div that contains all of the SMS data
             # The -1 brings us to the end to retrieve the very last message,
             conversation = parsed_html.find_class('gc-message-sms')[0].getparent().get_element_by_id(cid).find_class('gc-message-message-display')[-1] # [-1][-1] to select very LAST message
@@ -107,28 +108,24 @@ class GVAccount:
                 message_count[1]    = range(len(message_count[1:-2]))
                 del message_count[2:-2]
                 temp_count          = range(len(message_count))
-                temp_count[1]       = message_count[1]
-                temp_count[3]       = temp_count[3] + 2
+                temp_count[2]       = message_count[1]
+                temp_count[3]       = temp_count[3] + 1
                 message_count       = temp_count
             else:
                 conversation_hidden = False
                 message_count = range(message_count)
-            print message_count
             for mid in message_count:
                 if type(mid) is type([]):
                     for second_mid in mid:
-                        # print 'smid\t%d' % second_mid
                         message = conversation[2][-(second_mid+1)]
                         message = (message[0].text.strip()[:-1], message[2].text[1:], message[1].text) # (number (display), time, message)
                         messages.append('  %s, %s: %s' % message)
                 else:
-                    # print ' mid:\t%d' % mid
                     message = conversation[-(mid+1)]
-                    # print '%d: %s' % (mid, message.get('class'))
                     message = (message[0].text.strip()[:-1], message[2].text[1:], message[1].text) # (number (display), time, message)
-                    messages.append('%s, %s: %s' % message)
-            # The above substrings are simply for proper formatting right now.
-        print '\n'.join(messages)
+                    messages.append('%s,   %s: %s' % message)
+                # The above substrings are simply for proper formatting right now.
+            print '\n'.join(messages[::-1])
         self.last_time = self.temp_time
         return message_ids
     
