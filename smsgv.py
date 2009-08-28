@@ -71,7 +71,7 @@ class GVAccount:
                         #                             message_ids[key] = value['phoneNumber']
                         #                         print "Message ID: %s" % key
         if not self.initialized: self.initialized = True
-        return message_ids
+        return message_ids # TODO: Change to return a dictionary or list/tuple of data rather than just the message ID. [Time? Return phone #.]
     
     def __sms_parse(self, sms_page):
         from lxml import etree, html
@@ -82,8 +82,11 @@ class GVAccount:
         parsed_html = html.document_fromstring(html_page)
         message_ids = self.__id_gather(parsed_html) # Also sets initialized to true if necessary
         for cid in message_ids:
-            conversation = parsed_html.find_class('gc-message-sms')[0].getparent().get_element_by_id(cid).find_class('gc-message-message-display')
-            print conversation[0].text_content()
+            # Traverses down the DOM to get to the proper div that contains all of the SMS data
+            # The -1 brings us to the end to retrieve the very last message,
+            conversation = parsed_html.find_class('gc-message-sms')[0].getparent().get_element_by_id(cid).find_class('gc-message-message-display')[-1][-1]
+            print '%s, %s: %s' % (conversation[0].text.strip()[:-1], conversation[2].text[1:], conversation[1].text)
+            # The above substrings are simply for proper formatting right now.
         return message_ids
     
     def login(self, username, password):
