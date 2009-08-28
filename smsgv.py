@@ -41,6 +41,17 @@ class GVAccount:
         # Grab UID from the page and set it.
         self.uid = parsed_html.forms[0].inputs["_rnr_se"].value
     
+    def __convertTime(self, time):
+        """Converts the time format produced by Google to a HHMM 24-hour style for comparisons."""
+        # Format of the original time: x?x:xx (A|P)M
+        time = time.split(':') # yields ('x?x', 'xx (A|P)M')
+        newTime = ""
+        # Set the hours to a 24-hour format
+        if time[1].split(' ')[1] == "PM": newTime = str(int(time[0]) + 12)
+        else: newTime = "%.2d" % int(time[0])
+        newTime += time[1].split(' ')[0] # minutes
+        return newTime
+    
     def __id_gather(self, parsed_html):
         """Parses the HTML received from Google's servers to receive only the relevant messages."""
         message_ids = set()
@@ -60,16 +71,13 @@ class GVAccount:
                 # If not initialized, then the -very- last message sent is
                 # found. This is used when later detecting new messages.
                 if int(value['startTime']) > self.last_time:
-                    self.last_time = value['startTime']
+                    self.temp_time = value['startTime'] # Error here?
+                    # Find human readable version of self.last_time
+                    # Find ALL conversation elements where time is > last time (human readable)
+                    # Print to screen
                     if self.initialized:
                         message_ids.add(key)
                         print "Message ID: %s" % key
-                        # if key not in message_ids:
-                        #                             pass # Should not need to do anything if id already indexed
-                        #                         else:
-                        #                             # Later switch to tuple to store phone number and conversation notes?
-                        #                             message_ids[key] = value['phoneNumber']
-                        #                         print "Message ID: %s" % key
         if not self.initialized: self.initialized = True
         return message_ids # TODO: Change to return a dictionary or list/tuple of data rather than just the message ID. [Time? Return phone #.]
     
@@ -81,12 +89,47 @@ class GVAccount:
         html_page = html_page.replace(']]>', '')
         parsed_html = html.document_fromstring(html_page)
         message_ids = self.__id_gather(parsed_html) # Also sets initialized to true if necessary
+        messages = []
         for cid in message_ids:
             # Traverses down the DOM to get to the proper div that contains all of the SMS data
             # The -1 brings us to the end to retrieve the very last message,
-            conversation = parsed_html.find_class('gc-message-sms')[0].getparent().get_element_by_id(cid).find_class('gc-message-message-display')[-1][-1]
-            print '%s, %s: %s' % (conversation[0].text.strip()[:-1], conversation[2].text[1:], conversation[1].text)
+            conversation = parsed_html.find_class('gc-message-sms')[0].getparent().get_element_by_id(cid).find_class('gc-message-message-display')[-1] # [-1][-1] to select very LAST message
+            from time import strftime, localtime
+            # print int(strftime('%H%M', localtime(self.last_time)))
+            # print int(self.__convertTime(conversation[-5][2].text[1:]))
+            # print conversation[-2].get('class')
+            # print conversation[-3][-1].get('class')
+            message_count = len(conversation) - 1
+            if conversation[2].get('class') == 'gc-message-sms-old':
+                conversation_hidden = True
+                message_count       += len(conversation[2]) - 1
+                message_count       = range(message_count)
+                message_count[1]    = range(len(message_count[1:-2]))
+                del message_count[2:-2]
+                temp_count          = range(len(message_count))
+                temp_count[1]       = message_count[1]
+                temp_count[3]       = temp_count[3] + 2
+                message_count       = temp_count
+            else:
+                conversation_hidden = False
+                message_count = range(message_count)
+            print message_count
+            for mid in message_count:
+                if type(mid) is type([]):
+                    for second_mid in mid:
+                        # print 'smid\t%d' % second_mid
+                        message = conversation[2][-(second_mid+1)]
+                        message = (message[0].text.strip()[:-1], message[2].text[1:], message[1].text) # (number (display), time, message)
+                        messages.append('  %s, %s: %s' % message)
+                else:
+                    # print ' mid:\t%d' % mid
+                    message = conversation[-(mid+1)]
+                    # print '%d: %s' % (mid, message.get('class'))
+                    message = (message[0].text.strip()[:-1], message[2].text[1:], message[1].text) # (number (display), time, message)
+                    messages.append('%s, %s: %s' % message)
             # The above substrings are simply for proper formatting right now.
+        print '\n'.join(messages)
+        self.last_time = self.temp_time
         return message_ids
     
     def login(self, username, password):
