@@ -1,12 +1,12 @@
 from settings import USER, PASS # For testing purposes
 
 # We use the mobile website for everything possible to save on bandwidth
-LOGIN_URL       = "https://www.google.com/accounts/ServiceLoginAuth?service=grandcentral"
-SMS_SEND_URL    = "https://www.google.com/voice/m/sendsms"
-MARK_READ_URL   = "https://www.google.com/voice/m/mark?read=1&id="
-SMSLIST_M_URL   = "https://www.google.com/voice/m/i/sms"
+LOGIN_URL       = 'https://www.google.com/accounts/ServiceLoginAuth?service=grandcentral'
+SMS_SEND_URL    = 'https://www.google.com/voice/m/sendsms'
+MARK_READ_URL   = 'https://www.google.com/voice/m/mark?read=1&id='
+SMSLIST_M_URL   = 'https://www.google.com/voice/m/i/sms'
 # We use the main website (instead of mobile) because Google includes helpful data stored via JSON here
-SMSLIST_URL     = "https://www.google.com/voice/inbox/recent/sms"
+SMSLIST_URL     = 'https://www.google.com/voice/inbox/recent/sms'
 
 from re import compile
 timeConstrain = compile("now|\d{1,2} (seconds?|minutes?) ago|(1?\d|2[0-4]) hours? ago")
@@ -89,30 +89,20 @@ class GVAccount:
         html_page = html_page.replace(']]>', '')
         parsed_html = html.document_fromstring(html_page)
         message_ids = self.__id_gather(parsed_html) # Also sets initialized to true if necessary
-        messages = []
         for cid in message_ids:
             print '----------------------------------------------------'
+            messages = []
             # Traverses down the DOM to get to the proper div that contains all of the SMS data
             # The -1 brings us to the end to retrieve the very last message,
             conversation = parsed_html.find_class('gc-message-sms')[0].getparent().get_element_by_id(cid).find_class('gc-message-message-display')[-1] # [-1][-1] to select very LAST message
             from time import strftime, localtime
-            # print int(strftime('%H%M', localtime(self.last_time)))
+            # print int(strftime('%H%M',   mlocaltime(self.last_time)))
             # print int(self.__convertTime(conversation[-5][2].text[1:]))
-            # print conversation[-2].get('class')
-            # print conversation[-3][-1].get('class')
             message_count = len(conversation) - 1
             if len(conversation) > 2 and conversation[2].get('class') == 'gc-message-sms-old':
-                conversation_hidden = True
                 message_count       += len(conversation[2]) - 1
-                message_count       = range(message_count)
-                message_count[1]    = range(len(message_count[1:-2]))
-                del message_count[2:-2]
-                temp_count          = range(len(message_count))
-                temp_count[2]       = message_count[1]
-                temp_count[3]       = temp_count[3] + 1
-                message_count       = temp_count
+                message_count = [0, 1, range(message_count-3), 4]
             else:
-                conversation_hidden = False
                 message_count = range(message_count+1)
             for mid in message_count:
                 if type(mid) is type([]):
@@ -141,7 +131,7 @@ class GVAccount:
             install_opener(opener) # Let Google know we'll accept its nomtastic cookies
             from urllib import urlencode
             form = urlencode({ # Will be pushed to Google via POST
-                'continue': 'https://www.google.com/voice/m/i/sms/',
+                'continue': SMSLIST_M_URL,
                 'Email': username,
                 'Passwd': password,
                 'PersistentCookies': 'yes', # Keeps the account logged in.
