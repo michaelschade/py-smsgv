@@ -14,17 +14,23 @@ class GVSMS:
     def __init__(self, time, message):
         self.time       = time
         self.message    = message
+        if type(self.time) is str:
+            from time import strptime
+            self.time = self.time.strip()
+            self.time = strptime(self.time, '%I:%M %p')
     
     def __str__(self):
-        return '%s\t%s' % (self.time, self.message)
+        from time import strftime
+        return '%s\t%s' % (strftime('%H:%M', self.time), self.message)
 
 class GVAccount:
     """A representation of the user to handle their login, cookies, and message sending and receiving."""
     def __init__(self, username, password):
-        self.last_time = 0 # A failsafe in case no other message can set the baseline.
-        self.temp_time = 0
-        self.logged_in = False
-        self.initialized = False
+        self.last_time      = 0 # A failsafe in case no other message can set the baseline.
+        self.temp_time      = 0
+        self.logged_in      = False
+        self.initialized    = False
+        self.conversations  = {}
         print "Logging in..."
         self.login(username, password)
     
@@ -58,7 +64,6 @@ class GVAccount:
     
     def __id_gather(self, parsed_html):
         """Parses the HTML received from Google's servers to receive only the relevant messages."""
-        conversations = {}
         import cjson
         json = cjson.decode(parsed_html.find('.//json').text)
         # We only want to get relevant conversations
@@ -76,12 +81,15 @@ class GVAccount:
                 # found. This is used when later detecting new messages.
                 if int(value['startTime']) > self.last_time:
                     self.temp_time = value['startTime'] # Error here?
-                    if not self.initialized:
-                        conversations[key] = [None, []] # (last_hash, [Message, Message])
+                    if key in self.conversations:
+                        self.conversations[key] = [self.conversations[key][0], []]
+                    else:
+                        self.conversations[key] = [None, []] # (last_hash, [Message, Message])
         if self.temp_time == 0:
             self.temp_time = self.last_time
-        if not self.initialized: self.initialized = True
-        return conversations # TODO: Change to return a dictionary or list/tuple of data rather than just the message ID. [Time? Return phone #.]
+        if not self.initialized:
+            self.initialized = True
+        return None # TODO: Change to return a dictionary or list/tuple of data rather than just the message ID. [Time? Return phone #.]
     
     def __sms_parse(self, sms_page):
         from lxml import etree, html
@@ -90,8 +98,8 @@ class GVAccount:
         html_page = html_page.replace('<![CDATA[', '')
         html_page = html_page.replace(']]>', '')
         parsed_html = html.document_fromstring(html_page)
-        conversations = self.__id_gather(parsed_html) # Also sets initialized to true if necessary
-        for cid in conversations.iterkeys():
+        self.__id_gather(parsed_html) # Also sets initialized to true if necessary
+        for cid in self.conversations.iterkeys():
             # Traverses down the DOM to get to the proper div that contains all of the SMS data
             # The -1 brings us to the end to retrieve the very last message,
             conversation = parsed_html.find_class('gc-message-sms')[0].getparent().get_element_by_id(cid).find_class('gc-message-message-display')[-1] # [-1][-1] to select very LAST message
@@ -104,22 +112,40 @@ class GVAccount:
                 message_count =  [0, 1, range(message_count-3), 4]
             else:
                 message_count = range(message_count+1)
-            for mid in message_count:
-                if type(mid) is type([]):
-                    for second_mid in mid:
-                        message = conversation[2][-(second_mid+1)]
-                        message = GVSMS(message[2].text, message[1].text)
-                        conversations[cid][1].append(message)
-                else:
-                    message = conversation[-(mid+1)]
-                    message = GVSMS(message[2].text, message[1].text)
-                    conversations[cid][1].append(message)
-            message = conversation[-1]
-            message = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
-            conversations[cid][0] = message
+            found_unread = False
+            while not found_unread:
+                for mid in message_count:
+                    if self.conversations[cid][0] == None:
+                        message = conversation[-1]
+                        message = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
+                        self.conversations[cid][0] = message
+                    if found_unread == False:
+                        if type(mid) is type([]):
+                            for second_mid in mid:
+                                if found_unread == False:
+                                    message = conversation[2][-(second_mid+1)]
+                                    message_hash = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
+                                    if self.conversations[cid][0] == message_hash:
+                                        found_unread = True
+                                    else:
+                                        message = GVSMS(message[2].text, message[1].text)
+                                        self.conversations[cid][1].append(message)
+                        else:
+                            message = conversation[-(mid+1)]
+                            message_hash = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
+                            if self.conversations[cid][0] == message_hash:
+                                found_unread = True
+                                # Problem to think about
+                                # First time a text comes in/conversation is logged
+                                # There is an issue. Need to find out how to handle it.
+                            else:
+                                message = GVSMS(message[2].text, message[1].text)
+                                self.conversations[cid][1].append(message)
+            try: self.conversations[cid][0] = message_hash
+            except: pass
             # The above substrings are simply for proper formatting right now.
         self.last_time = self.temp_time
-        return conversations
+        return None
     
     def login(self, username, password):
         """Logs into the Google Account system and receives the cookies into a
@@ -147,14 +173,14 @@ class GVAccount:
         """Retrieves the SMS messages from Google's servers to pass to the Parse function."""
         from urllib2 import Request, urlopen
         handle = urlopen(Request(SMSLIST_URL))
-        conversations = self.__sms_parse(handle)
-        for cid in conversations.iterkeys():
+        self.__sms_parse(handle)
+        for cid in self.conversations.iterkeys():
             self.__mark_read(cid)
-        for cid, cdata in conversations.iteritems():
+        for cid, cdata in self.conversations.iteritems():
             cdata = cdata[1]
             for index in range(len(cdata)):
                 print cdata.pop()
-        return conversations
+        return None
     
     def sms_send(self, number, message):
         from urllib2 import Request, urlopen
