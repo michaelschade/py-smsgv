@@ -71,9 +71,9 @@ class GVAccount:
                 if int(value['startTime']) > self.last_time:
                     self.temp_time = value['startTime'] # Error here?
                     if key in self.conversations:
-                        self.conversations[key] = [self.conversations[key][0], []]
+                        self.conversations[key] = [self.conversations[key][0], False, []]
                     else:
-                        self.conversations[key] = [None, []] # (last_hash, [Message, Message])
+                        self.conversations[key] = [None, True, []] # (last_hash, first time?, [Message, Message])
         if self.temp_time == 0:
             self.temp_time = self.last_time
         if not self.initialized:
@@ -91,44 +91,53 @@ class GVAccount:
         for cid in self.conversations.iterkeys():
             # Traverses down the DOM to get to the proper div that contains all of the SMS data
             # The -1 brings us to the end to retrieve the very last message.
-            conversation = parsed_html.find_class('gc-message')[0].getparent().get_element_by_id(cid).find_class('gc-message-message-display')[-1]
-            # KEY ERROR HAPPENS HERE
-            from time import strftime, localtime
-            message_count = len(conversation) - 1
-            if len(conversation) > 2 and conversation[2].get('class') == 'gc-message-sms-old':
-                message_count += len(conversation[2]) - 1
-                message_count =  [0, 1, range(message_count-3), 4]
+            try:
+                conversation = parsed_html.find_class('gc-message')[0].getparent().get_element_by_id(cid).find_class('gc-message-message-display')[-1]
+            except KeyError:
+                del self.conversations[cid]
             else:
-                message_count = range(message_count+1)
-            found_unread = False
-            while not found_unread:
-                for mid in message_count:
-                    if self.conversations[cid][0] == None:
-                        message = conversation[-1]
-                        message = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
-                        self.conversations[cid][0] = message
-                    if found_unread == False:
-                        if type(mid) is type([]):
-                            for second_mid in mid:
-                                if found_unread == False:
-                                    message = conversation[2][-(second_mid+1)]
-                                    message_hash = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
-                                    if self.conversations[cid][0] == message_hash:
-                                        found_unread = True
-                                    else:
-                                        message = GVSMS(message[2].text, message[1].text)
-                                        self.conversations[cid][1].append(message)
-                        else:
-                            message = conversation[-(mid+1)]
-                            message_hash = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
-                            if self.conversations[cid][0] == message_hash:
-                                found_unread = True
-                                # Problem to think about
-                                # First time a text comes in/conversation is logged
-                                # There is an issue. Need to find out how to handle it.
+                from time import strftime, localtime
+                message_count = len(conversation) - 1
+                if len(conversation) > 2 and conversation[2].get('class') == 'gc-message-sms-old':
+                    message_count += len(conversation[2]) - 1
+                    message_count =  [0, 1, range(message_count-3), 4]
+                else:
+                    message_count = range(message_count+1)
+                found_unread = False
+                # Error with getting first message of a new conversation
+                # and with a KeyError when a conversation no longer exists
+                # (use try...except block)
+                while not found_unread:
+                    for mid in message_count:
+                        if self.conversations[cid][0] == None:
+                            message = conversation[-1]
+                            message = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
+                            self.conversations[cid][0] = message
+                        if found_unread == False:
+                            if type(mid) is type([]):
+                                for second_mid in mid:
+                                    if found_unread == False:
+                                        message = conversation[2][-(second_mid+1)]
+                                        message_hash = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
+                                        if self.conversations[cid][0] == message_hash:
+                                            found_unread = True
+                                            if self.conversations[cid][1]:
+                                                message = GVSMS(message[2].text, message[1].text)
+                                                self.conversations[cid][2].append(message)
+                                        else:
+                                            message = GVSMS(message[2].text, message[1].text)
+                                            self.conversations[cid][2].append(message)
                             else:
-                                message = GVSMS(message[2].text, message[1].text)
-                                self.conversations[cid][1].append(message)
+                                message = conversation[-(mid+1)]
+                                message_hash = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
+                                if self.conversations[cid][0] == message_hash:
+                                    found_unread = True
+                                    if self.conversations[cid][1]:
+                                        message = GVSMS(message[2].text, message[1].text)
+                                        self.conversations[cid][2].append(message)
+                                else:
+                                    message = GVSMS(message[2].text, message[1].text)
+                                    self.conversations[cid][2].append(message)
             try:
                 message = conversation[-1]
                 message = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
@@ -167,7 +176,7 @@ class GVAccount:
         handle = urlopen(Request(SMSLIST_URL))
         self.__sms_parse(handle)
         for cid, cdata in self.conversations.iteritems():
-            cdata = cdata[1]
+            cdata = cdata[2]
             for index in range(len(cdata)):
                 print cdata.pop()
         return None
