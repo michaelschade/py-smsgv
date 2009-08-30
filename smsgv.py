@@ -1,8 +1,6 @@
-from settings import USER, PASS # For testing purposes
-
 # We use the mobile website for everything possible to save on bandwidth
 LOGIN_URL       = 'https://www.google.com/accounts/ServiceLoginAuth?service=grandcentral'
-send_sms_URL    = 'https://www.google.com/voice/m/sendsms'
+SEND_SMS_URL    = 'https://www.google.com/voice/m/sendsms'
 READ_URL        = 'https://www.google.com/voice/m/mark?read=1&id='
 UNREAD_URL      = 'https://www.google.com/voice/m/mark?read=0&id='
 SMSLIST_M_URL   = 'https://www.google.com/voice/m/i/sms'
@@ -19,6 +17,7 @@ class NotLoggedIn(Exception):
         return self.username
 
 class GVAccount:
+    """Handles account-related functions of Google Voice for smsGV."""
     def __init__(self, username, password):
         self.id             = None
         self.username       = str(username)
@@ -83,7 +82,7 @@ class GVAccount:
                 'smstext': message,
                 '_rnr_se': self.id,
             })
-            urlopen(Request(send_sms_URL, form, {'Content-type': 'application/x-www-form-urlencoded'}))
+            urlopen(Request(SEND_SMS_URL, form, {'Content-type': 'application/x-www-form-urlencoded'}))
         else:
             raise NotLoggedIn(self.username)
     
@@ -143,26 +142,9 @@ class GVAccount:
         else:
             raise NotLoggedIn(self.username)
     
-    def display_messages(self):
-        """Formatted display of new text messages."""
-        # Not necessary to keep this code in the library,
-        # but good for testing for now.
-        print 'Messages for %s:' % self
-        display = False
-        for conversation in self.conversations.itervalues():
-            if len(conversation.messages) > 0:
-                if not display:
-                    display = True
-                print '  %s' % ''.join(['-' for i in range(len(conversation.display) + len(conversation.number) + 4)])
-                print '  %s:' % conversation
-                print '  %s' % ''.join(['-' for i in range(len(conversation.display) + len(conversation.number) + 4)])
-                for message in conversation.messages:
-                    print '  %s' % message
-        if not display:
-            print '  None'
-    
 
 class GVConversation:
+    """Holds metadata and messages for a given text-message conversation."""
     def __init__(self, account, id, number, display):
         self.account        = account       # Relates back to the Google Voice account
         self.id             = id            # Conversation id used by Google
@@ -188,22 +170,23 @@ class GVConversation:
         message_count = len(conversation) - 1
         if len(conversation) > 2 and conversation[2].get('class') == 'gc-message-sms-old': # Google has some messages hidden
             message_count   += len(conversation[2]) - 1
-            message_count   =  [0, 1, range(message_count-3), 4]
+            message_count   =  [0, 1, range(message_count-3), 4] # Preset list styling when Google hides some SMSes.
             count           =  len(message_count[2])+3
         else:
             message_count   = range(message_count+1)
             count           = len(message_count)
-        found_unread        = False
+        found_unread        = False # Used to detect if last unread message has yet been found.
         def build_hash(message):
             # hash('time message')
             """Builds a unique hash of the message/time combination and count."""
             return hash('%s%s' % (message[2].text, message[1].text))
         def add_message(message):
+            """Adds a message object to the class' list of Message objects."""
             message = GVMessage(message[2].text, message[1].text)
             self.messages.append(message)
         while not found_unread:
             for mid in message_count:
-                if self.hash == None:
+                if self.hash == None: # Must set the hash first /only/ if none already set.
                     self.hash = build_hash(conversation[-1])
                 if type(mid) is type([]) and not found_unread:
                     for second_mid in mid:
@@ -253,6 +236,7 @@ class GVConversation:
         self.__simple_request('%s' % (UNREAD_URL + self.id))
 
 class GVMessage:
+    """Holds details for each individual text message."""
     def __init__(self, time, message):
         self.time       = time
         self.message    = message
@@ -265,5 +249,25 @@ class GVMessage:
         from time import strftime
         return '%s:\t%s' % (strftime('%H:%M', self.time), self.message)
 
-# Also for testing purposes
-gv = GVAccount(USER, PASS)
+class GVUtil:
+    """Useful testing-related/user-accessible functions not crucial to smsGV operation."""
+    def __init__(self):
+        pass
+    
+    def display_messages(self):
+        """Formatted display of new text messages."""
+        # Not necessary to keep this code in the library,
+        # but good for testing for now.
+        print 'Messages for %s:' % self
+        display = False
+        for conversation in self.conversations.itervalues():
+            if len(conversation.messages) > 0:
+                if not display:
+                    display = True
+                print '  %s' % ''.join(['-' for i in range(len(conversation.display) + len(conversation.number) + 4)])
+                print '  %s:' % conversation
+                print '  %s' % ''.join(['-' for i in range(len(conversation.display) + len(conversation.number) + 4)])
+                for message in conversation.messages:
+                    print '  %s' % message
+        if not display:
+            print '  None'
