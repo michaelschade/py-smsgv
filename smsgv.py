@@ -123,14 +123,19 @@ class GVAccount:
         self.__check_conversations(sms_list)
     
     def display_messages(self):
-        print 'Messages for %s' % self
+        print 'Messages for %s:' % self
+        display = False
         for conversation in self.conversations.itervalues():
             if len(conversation.messages) > 0:
-                print ''.join(['-' for i in range(len(self.username))])
-                print '%s (%s):' % (conversation.display, conversation.number)
-                print ''.join(['-' for i in range(len(self.username))])
+                if not display:
+                    display = True
+                print '  %s' % ''.join(['-' for i in range(len(conversation.display) + len(conversation.number) + 4)])
+                print '  %s (%s):' % (conversation.display, conversation.number)
+                print '  %s' % ''.join(['-' for i in range(len(conversation.display) + len(conversation.number) + 4)])
                 for message in conversation.messages:
-                    print message
+                    print '  %s' % message
+        if not display:
+            print '  None'
 
 class GVConversation:
     def __init__(self, account, id, number, display):
@@ -225,7 +230,7 @@ class GVMessage:
     
     def __str__(self):
         from time import strftime
-        return '%s\t%s' % (strftime('%H:%M', self.time), self.message)
+        return '%s:\t%s' % (strftime('%H:%M', self.time), self.message)
 
 # Also for testing purposes
 gv = GVAccount(USER, PASS)
