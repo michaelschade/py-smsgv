@@ -2,7 +2,7 @@ from settings import USER, PASS # For testing purposes
 
 # We use the mobile website for everything possible to save on bandwidth
 LOGIN_URL       = 'https://www.google.com/accounts/ServiceLoginAuth?service=grandcentral'
-SMS_SEND_URL    = 'https://www.google.com/voice/m/sendsms'
+send_sms_URL    = 'https://www.google.com/voice/m/sendsms'
 READ_URL        = 'https://www.google.com/voice/m/mark?read=1&id='
 UNREAD_URL      = 'https://www.google.com/voice/m/mark?read=0&id='
 SMSLIST_M_URL   = 'https://www.google.com/voice/m/i/sms'
@@ -31,9 +31,6 @@ class GVAccount:
         self.initialized    = False
         self.conversations  = {}
         self.login(password)
-        self.sms_check()    # Initialization check
-        if not self.initialized:
-            self.initialized = True
     
     def __str__(self):
         return '%s' % self.username
@@ -65,15 +62,19 @@ class GVAccount:
             urlopen(Request(LOGIN_URL, form, {'Content-type': 'application/x-www-form-urlencoded'}))
             self.logged_in = True
             self.__find_id()
+        self.check_sms()    # Initialization check
+        if not self.initialized:
+            self.initialized = True
     
     def logout                  (self):
         """Unsets all cookies and resets variables with semi-sensitive data."""
         self.cookies.clear()
         self.id             = None
+        self.initialized    = False
         self.logged_in      = False
         self.conversations  = {}
     
-    def sms_send                (self, number, message):
+    def send_sms                (self, number, message):
         if self.logged_in:
             from urllib2 import Request, urlopen
             from urllib import urlencode
@@ -82,7 +83,7 @@ class GVAccount:
                 'smstext': message,
                 '_rnr_se': self.id,
             })
-            urlopen(Request(SMS_SEND_URL, form, {'Content-type': 'application/x-www-form-urlencoded'}))
+            urlopen(Request(send_sms_URL, form, {'Content-type': 'application/x-www-form-urlencoded'}))
         else:
             raise NotLoggedIn(self.username)
     
@@ -127,7 +128,7 @@ class GVAccount:
             else:
                 self.conversations[cid].find_messages(conversation_data)
     
-    def sms_check(self):
+    def check_sms(self):
         """Retrieves the SMS messages from Google's servers to pass to the Parse function."""
         if self.logged_in:
             from urllib2 import Request, urlopen
@@ -153,7 +154,7 @@ class GVAccount:
                 if not display:
                     display = True
                 print '  %s' % ''.join(['-' for i in range(len(conversation.display) + len(conversation.number) + 4)])
-                print '  %s (%s):' % (conversation.display, conversation.number)
+                print '  %s:' % conversation
                 print '  %s' % ''.join(['-' for i in range(len(conversation.display) + len(conversation.number) + 4)])
                 for message in conversation.messages:
                     print '  %s' % message
@@ -171,8 +172,11 @@ class GVConversation:
         self.first_check    = True          # First time checking for text messages?
         self.messages       = []            # Stores all GVMessage objects
     
+    def __str__(self):
+        return '%s (%s)' % (self.display, self.number)
+    
     def send_message    (self, message):
-        self.account.sms_send(self.number, message)
+        self.account.send_sms(self.number, message)
     
     def reset_messages  (self):
         if not self.first_check:
