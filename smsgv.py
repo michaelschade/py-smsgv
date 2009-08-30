@@ -3,7 +3,8 @@ from settings import USER, PASS # For testing purposes
 # We use the mobile website for everything possible to save on bandwidth
 LOGIN_URL       = 'https://www.google.com/accounts/ServiceLoginAuth?service=grandcentral'
 SMS_SEND_URL    = 'https://www.google.com/voice/m/sendsms'
-MARK_READ_URL   = 'https://www.google.com/voice/m/mark?read=1&id='
+READ_URL        = 'https://www.google.com/voice/m/mark?read=1&id='
+UNREAD_URL      = 'https://www.google.com/voice/m/mark?read=0&id='
 SMSLIST_M_URL   = 'https://www.google.com/voice/m/i/sms'
 ARCHIVE_URL     = 'https://www.google.com/voice/m/archive?id='
 # We use the main website (instead of mobile) because Google includes helpful data stored via JSON here
@@ -207,17 +208,23 @@ class GVConversation:
             pass
         # The above substrings are simply for proper formatting right now.
     
-    def archive         (self):
-        """Makes GET request to Google's httpd to archive a conversation"""
+    def __simple_request(self, url):
+        """Makes GET request to Google's httpd to perform action."""
         from urllib2 import Request, urlopen
-        urlopen(Request(ARCHIVE_URL + self.id))
+        urlopen(Request(url))
+    
+    def archive         (self):
+        """Archive conversation via a simple HTTP request."""
+        self.__simple_request('%s%s' % (ARCHIVE_URL + self.id))
         del self
     
     def mark_read       (self):
-        # Each conversation has its own id, so we can pass that via GET to mark it as read.
-        """Makes GET request to Google's httpd to mark conversation as read."""
-        from urllib2 import Request, urlopen
-        urlopen(Request(MARK_READ_URL + self.id))
+        """Mark conversation as read via a simple HTTP request."""
+        self.__simple_request('%s%s' % (READ_URL + self.id))
+    
+    def mark_unread     (self):
+        """Mark conversation as unread via a simple HTTP request."""
+        self.__simple_request('%s%s' % (UNREAD_URL + self.id))
 
 class GVMessage:
     def __init__(self, time, message):
