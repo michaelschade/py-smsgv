@@ -100,7 +100,9 @@ class GVAccount:
             #   - Message is a SMS in the inbox
             #   - Message is unread
             #   - Message is within the past 24 hours (86,400 seconds)
-            if (time() - conversation_data['startTime'] < 86400) and ('sms' in conversation_data['labels']) and ('inbox' in conversation_data['labels']):
+            if (time() - conversation_data['startTime'] < 86400) \
+               and ('sms' in conversation_data['labels']) \
+               and ('inbox' in conversation_data['labels']):
                 # If not initialized, then the -very- last message sent is
                 # found. This is used when later detecting new messages.
                 if int(conversation_data['startTime']) > self.last_time:
@@ -254,13 +256,13 @@ class GVUtil:
     def __init__(self):
         pass
     
-    def display_messages(self):
+    def display_messages(self, account):
         """Formatted display of new text messages."""
         # Not necessary to keep this code in the library,
         # but good for testing for now.
-        print 'Messages for %s:' % self
+        print 'Messages for %s:' % account
         display = False
-        for conversation in self.conversations.itervalues():
+        for conversation in account.conversations.itervalues():
             if len(conversation.messages) > 0:
                 if not display:
                     display = True
