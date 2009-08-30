@@ -107,42 +107,41 @@ class GVAccount:
                 else:
                     message_count = range(message_count+1)
                 found_unread = False
-                # Error with getting first message of a new conversation
-                # and with a KeyError when a conversation no longer exists
-                # (use try...except block)
                 while not found_unread:
                     for mid in message_count:
                         if self.conversations[cid][0] == None:
                             message = conversation[-1]
                             message = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
                             self.conversations[cid][0] = message
-                        if found_unread == False:
-                            if type(mid) is type([]):
-                                for second_mid in mid:
-                                    if found_unread == False:
-                                        message = conversation[2][-(second_mid+1)]
-                                        message_hash = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
-                                        if self.conversations[cid][0] == message_hash:
-                                            found_unread = True
-                                            if self.conversations[cid][1]:
-                                                message = GVSMS(message[2].text, message[1].text)
-                                                self.conversations[cid][2].append(message)
-                                        else:
+                        if type(mid) is type([]) and not found_unread:
+                            for second_mid in mid:
+                                if found_unread == False:
+                                    message = conversation[2][-(second_mid+1)]
+                                    message_hash = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
+                                    if self.conversations[cid][0] == message_hash:
+                                        found_unread = True
+                                        if self.conversations[cid][1]:
                                             message = GVSMS(message[2].text, message[1].text)
                                             self.conversations[cid][2].append(message)
-                            else:
-                                message = conversation[-(mid+1)]
-                                message_hash = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
-                                if self.conversations[cid][0] == message_hash:
-                                    found_unread = True
-                                    if self.conversations[cid][1]:
+                                    else:
                                         message = GVSMS(message[2].text, message[1].text)
                                         self.conversations[cid][2].append(message)
-                                else:
+                        elif not found_unread:
+                            message = conversation[-(mid+1)]
+                            message_hash = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
+                            if self.conversations[cid][0] == message_hash:
+                                found_unread = True
+                                if self.conversations[cid][1]:
                                     message = GVSMS(message[2].text, message[1].text)
                                     self.conversations[cid][2].append(message)
+                            else:
+                                message = GVSMS(message[2].text, message[1].text)
+                                self.conversations[cid][2].append(message)
                         else:
                             break
+                        # HASH fix:
+                        #   Include either len(conversation) in hash
+                        #   or just use that as the hash.
             try:
                 message = conversation[-1]
                 message = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
