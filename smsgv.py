@@ -211,9 +211,6 @@ class GVConversation:
                         add_message(message)
                 else:
                     break
-                # HASH fix:
-                #   Include either len(conversation) in hash
-                #   or just use that as the hash.
         try:
             self.hash = build_hash(conversation[-1])
         except:
@@ -259,8 +256,6 @@ class GVUtil:
     
     def display_messages(self, account):
         """Formatted display of new text messages."""
-        # Not necessary to keep this code in the library,
-        # but good for testing for now.
         print 'Messages for %s:' % account
         display = False
         for conversation in account.conversations.itervalues():
