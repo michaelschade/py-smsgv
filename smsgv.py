@@ -12,10 +12,20 @@ SMSLIST_URL     = 'https://www.google.com/voice/inbox/recent/sms'
 
 # Todo: Add multiple pages of messages support
 
+class NotLoggedIn(Exception):
+    def __init__(self, username):
+        self.username = str(username)
+    def __str__(self):
+        return self.username
+
 class GVAccount:
     def __init__(self, username, password):
         self.id             = None
         self.username       = str(username)
+        from cookielib import LWPCookieJar
+        self.cookies        = LWPCookieJar("%s.lwp" % self.username) # Named using the username to prevent overlap with another user.
+        # Switch to UUID instead, then default to user if an older version of the python
+        # TODO: Evaluate possibility of cookie_jar.save() and .load() to add failsafe in case of need to 'relogin'
         self.logged_in      = False
         self.last_time      = 0
         self.initialized    = False
@@ -43,11 +53,7 @@ class GVAccount:
         file to allow continued use of the Google Voice system."""
         if not self.logged_in:# We don't need to repeat this process over and over
             from urllib2 import HTTPCookieProcessor, build_opener, install_opener, Request, urlopen
-            from cookielib import LWPCookieJar
-            # Switch to UUID instead, then default to user if an older version of the python
-            cookie_jar = LWPCookieJar("%s.lwp" % self.username) # Named using the username to prevent overlap with another user.
-            # TODO: Evaluate possibility of cookie_jar.save() and .load() to add failsafe in case of need to 'relogin'
-            opener = build_opener(HTTPCookieProcessor(cookie_jar))
+            opener = build_opener(HTTPCookieProcessor(self.cookies))
             install_opener(opener) # Let Google know we'll accept its nomtastic cookies
             from urllib import urlencode
             form = urlencode({ # Will be pushed to Google via POST
@@ -60,15 +66,25 @@ class GVAccount:
             self.logged_in = True
             self.__find_id()
     
+    def logout                  (self):
+        """Unsets all cookies and resets variables with semi-sensitive data."""
+        self.cookies.clear()
+        self.id             = None
+        self.logged_in      = False
+        self.conversations  = {}
+    
     def sms_send                (self, number, message):
-        from urllib2 import Request, urlopen
-        from urllib import urlencode
-        form = urlencode({
-            'number': number,
-            'smstext': message,
-            '_rnr_se': self.id,
-        })
-        urlopen(Request(SMS_SEND_URL, form, {'Content-type': 'application/x-www-form-urlencoded'}))
+        if self.logged_in:
+            from urllib2 import Request, urlopen
+            from urllib import urlencode
+            form = urlencode({
+                'number': number,
+                'smstext': message,
+                '_rnr_se': self.id,
+            })
+            urlopen(Request(SMS_SEND_URL, form, {'Content-type': 'application/x-www-form-urlencoded'}))
+        else:
+            raise NotLoggedIn(self.username)
     
     def __find_conversations    (self, sms_list):
         """Parses the HTML received from Google's servers to receive only the relevant messages."""
@@ -113,17 +129,23 @@ class GVAccount:
     
     def sms_check(self):
         """Retrieves the SMS messages from Google's servers to pass to the Parse function."""
-        from urllib2 import Request, urlopen
-        sms_list = urlopen(Request(SMSLIST_URL))
-        from lxml import html
-        # Strip CDATA tags
-        sms_list = sms_list.read()
-        sms_list = sms_list.replace('<![CDATA[', '').replace(']]>', '')
-        sms_list = html.document_fromstring(sms_list)
-        self.__find_conversations (sms_list)
-        self.__check_conversations(sms_list)
+        if self.logged_in:
+            from urllib2 import Request, urlopen
+            sms_list = urlopen(Request(SMSLIST_URL))
+            from lxml import html
+            # Strip CDATA tags
+            sms_list = sms_list.read()
+            sms_list = sms_list.replace('<![CDATA[', '').replace(']]>', '')
+            sms_list = html.document_fromstring(sms_list)
+            self.__find_conversations (sms_list)
+            self.__check_conversations(sms_list)
+        else:
+            raise NotLoggedIn(self.username)
     
     def display_messages(self):
+        """Formatted display of new text messages."""
+        # Not necessary to keep this code in the library,
+        # but good for testing for now.
         print 'Messages for %s:' % self
         display = False
         for conversation in self.conversations.itervalues():
@@ -137,6 +159,7 @@ class GVAccount:
                     print '  %s' % message
         if not display:
             print '  None'
+    
 
 class GVConversation:
     def __init__(self, account, id, number, display):
@@ -160,11 +183,13 @@ class GVConversation:
         from time import strftime, localtime
         message_count = len(conversation) - 1
         if len(conversation) > 2 and conversation[2].get('class') == 'gc-message-sms-old': # Google has some messages hidden
-            message_count += len(conversation[2]) - 1
-            message_count =  [0, 1, range(message_count-3), 4]
+            message_count   += len(conversation[2]) - 1
+            message_count   =  [0, 1, range(message_count-3), 4]
+            count           =  len(message_count[2])+3
         else:
-            message_count = range(message_count+1)
-        found_unread    = False
+            message_count   = range(message_count+1)
+            count           = len(message_count)
+        found_unread        = False
         def build_hash(message):
             # hash('time message')
             """Builds a unique hash of the message/time combination and count."""
