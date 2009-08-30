@@ -164,46 +164,43 @@ class GVConversation:
             message_count =  [0, 1, range(message_count-3), 4]
         else:
             message_count = range(message_count+1)
-        found_unread = False
+        found_unread    = False
+        def build_hash(message):
+            # hash('time message')
+            """Builds a unique hash of the message/time combination and count."""
+            return hash('%s%s' % (message[2].text, message[1].text))
+        def add_message(message):
+            message = GVMessage(message[2].text, message[1].text)
+            self.messages.append(message)
         while not found_unread:
             for mid in message_count:
                 if self.hash == None:
-                    message = conversation[-1]
-                    message = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
-                    self.hash = message
+                    self.hash = build_hash(conversation[-1])
                 if type(mid) is type([]) and not found_unread:
                     for second_mid in mid:
-                        if found_unread == False:
+                        if not found_unread:
                             message = conversation[2][-(second_mid+1)]
-                            message_hash = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
-                            if self.hash == message_hash:
+                            if self.hash == build_hash(message):
                                 found_unread = True
                                 if not self.first_check:
-                                    message = GVMessage(message[2].text, message[1].text)
-                                    self.messages.append(message)
+                                    add_message(message)
                             else:
-                                message = GVMessage(message[2].text, message[1].text)
-                                self.messages.append(message)
+                                add_message(message)
                 elif not found_unread:
                     message = conversation[-(mid+1)]
-                    message_hash = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
-                    if self.hash == message_hash:
+                    if self.hash == build_hash(message):
                         found_unread = True
                         if not self.first_check:
-                            message = GVMessage(message[2].text, message[1].text)
-                            self.messages.append(message)
+                            add_message(message)
                     else:
-                        message = GVMessage(message[2].text, message[1].text)
-                        self.messages.append(message)
+                        add_message(message)
                 else:
                     break
                 # HASH fix:
                 #   Include either len(conversation) in hash
                 #   or just use that as the hash.
         try:
-            message = conversation[-1]
-            message = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
-            self.hash = message
+            self.hash = build_hash(conversation[-1])
         except:
             pass
         # The above substrings are simply for proper formatting right now.
@@ -215,16 +212,16 @@ class GVConversation:
     
     def archive         (self):
         """Archive conversation via a simple HTTP request."""
-        self.__simple_request('%s%s' % (ARCHIVE_URL + self.id))
+        self.__simple_request('%s' % (ARCHIVE_URL + self.id))
         del self
     
     def mark_read       (self):
         """Mark conversation as read via a simple HTTP request."""
-        self.__simple_request('%s%s' % (READ_URL + self.id))
+        self.__simple_request('%s' % (READ_URL + self.id))
     
     def mark_unread     (self):
         """Mark conversation as unread via a simple HTTP request."""
-        self.__simple_request('%s%s' % (UNREAD_URL + self.id))
+        self.__simple_request('%s' % (UNREAD_URL + self.id))
 
 class GVMessage:
     def __init__(self, time, message):
