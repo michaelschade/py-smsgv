@@ -5,6 +5,7 @@ LOGIN_URL       = 'https://www.google.com/accounts/ServiceLoginAuth?service=gran
 SMS_SEND_URL    = 'https://www.google.com/voice/m/sendsms'
 MARK_READ_URL   = 'https://www.google.com/voice/m/mark?read=1&id='
 SMSLIST_M_URL   = 'https://www.google.com/voice/m/i/sms'
+ARCHIVE_URL     = 'https://www.google.com/voice/m/archive?id='
 # We use the main website (instead of mobile) because Google includes helpful data stored via JSON here
 SMSLIST_URL     = 'https://www.google.com/voice/inbox/recent/sms'
 
@@ -13,16 +14,18 @@ SMSLIST_URL     = 'https://www.google.com/voice/inbox/recent/sms'
 class GVAccount:
     def __init__(self, username, password):
         self.id             = None
+        self.username       = str(username)
         self.logged_in      = False
-        # test
-        self.last_time = 0
-        # end test
+        self.last_time      = 0
         self.initialized    = False
         self.conversations  = {}
-        self.login(username, password)
+        self.login(password)
         self.sms_check()    # Initialization check
         if not self.initialized:
             self.initialized = True
+    
+    def __str__(self):
+        return '%s' % self.username
     
     def __find_id               (self):
         """Finds account ID used by Google to authenticate SMS sending."""
@@ -34,21 +37,21 @@ class GVAccount:
         # Grab UID from the page and set it.
         self.id = parsed_html.forms[0].inputs["_rnr_se"].value
     
-    def login                   (self, username, password):
+    def login                   (self, password):
         """Logs into the Google Account system and receives the cookies into a
         file to allow continued use of the Google Voice system."""
         if not self.logged_in:# We don't need to repeat this process over and over
             from urllib2 import HTTPCookieProcessor, build_opener, install_opener, Request, urlopen
             from cookielib import LWPCookieJar
             # Switch to UUID instead, then default to user if an older version of the python
-            cookie_jar = LWPCookieJar("%s.lwp" % username) # Named using the username to prevent overlap with another user.
+            cookie_jar = LWPCookieJar("%s.lwp" % self.username) # Named using the username to prevent overlap with another user.
             # TODO: Evaluate possibility of cookie_jar.save() and .load() to add failsafe in case of need to 'relogin'
             opener = build_opener(HTTPCookieProcessor(cookie_jar))
             install_opener(opener) # Let Google know we'll accept its nomtastic cookies
             from urllib import urlencode
             form = urlencode({ # Will be pushed to Google via POST
                 'continue': SMSLIST_M_URL,
-                'Email': username,
+                'Email': self.username,
                 'Passwd': password,
                 'PersistentCookies': 'yes',
             })
@@ -90,7 +93,8 @@ class GVAccount:
                     else:
                         self.conversations[conversation_data['id']] = GVConversation(self,
                             conversation_data['id'],
-                            conversation_data['phoneNumber'])
+                            conversation_data['phoneNumber'],
+                            conversation_data['displayNumber'])
         if self.temp_time == 0:
             self.temp_time = self.last_time
     
@@ -117,17 +121,23 @@ class GVAccount:
         sms_list = html.document_fromstring(sms_list)
         self.__find_conversations (sms_list)
         self.__check_conversations(sms_list)
-        # for cid, cdata in self.conversations.iteritems():
-        #             cdata = cdata[2]
-        #             for index in range(len(cdata)):
-        #                 print cdata.pop()
     
+    def display_messages(self):
+        print 'Messages for %s' % self
+        for conversation in self.conversations.itervalues():
+            if len(conversation.messages) > 0:
+                print ''.join(['-' for i in range(len(self.username))])
+                print '%s (%s):' % (conversation.display, conversation.number)
+                print ''.join(['-' for i in range(len(self.username))])
+                for message in conversation.messages:
+                    print message
 
 class GVConversation:
-    def __init__(self, account, id, number):
+    def __init__(self, account, id, number, display):
         self.account        = account       # Relates back to the Google Voice account
         self.id             = id            # Conversation id used by Google
         self.number         = str(number)   # +15555555555 version of phone number
+        self.display        = display       # Display number/name (provided by Google)
         self.hash           = None          # Hash of last conversation
         self.first_check    = True          # First time checking for text messages?
         self.messages       = []            # Stores all GVMessage objects
@@ -192,11 +202,16 @@ class GVConversation:
             pass
         # The above substrings are simply for proper formatting right now.
     
+    def archive         (self):
+        """Makes GET request to Google's httpd to archive a conversation"""
+        from urllib2 import Request, urlopen
+        urlopen(Request(ARCHIVE_URL + self.id))
+        del self
+    
     def mark_read       (self):
         # Each conversation has its own id, so we can pass that via GET to mark it as read.
-        """makes GET requests to Google's httpd to mark conversation as read."""
+        """Makes GET request to Google's httpd to mark conversation as read."""
         from urllib2 import Request, urlopen
-        print "Marking %s as read" % self.id
         urlopen(Request(MARK_READ_URL + self.id))
 
 class GVMessage:
