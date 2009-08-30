@@ -184,8 +184,9 @@ class GVConversation:
             return hash('%s%s' % (message[2].text, message[1].text))
         def add_message(message):
             """Adds a message object to the class' list of Message objects."""
-            message = GVMessage(message[2].text, message[1].text)
-            self.messages.append(message)
+            if message[0].text.strip() != 'Me:':
+                message = GVMessage(message[2].text, message[1].text)
+                self.messages.append(message)
         while not found_unread:
             for mid in message_count:
                 if self.hash == None: # Must set the hash first /only/ if none already set.
