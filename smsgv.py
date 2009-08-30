@@ -73,7 +73,10 @@ class GVAccount:
                     if key in self.conversations:
                         self.conversations[key] = [self.conversations[key][0], False, []]
                     else:
-                        self.conversations[key] = [None, True, []] # (last_hash, first time?, [Message, Message])
+                        if not self.initialized:
+                            self.conversations[key] = [None, False, []] # (last_hash, first time?, [Message, Message])
+                        else:
+                            self.conversations[key] = [None, True, []] # (last_hash, first time?, [Message, Message])
         if self.temp_time == 0:
             self.temp_time = self.last_time
         if not self.initialized:
@@ -138,6 +141,8 @@ class GVAccount:
                                 else:
                                     message = GVSMS(message[2].text, message[1].text)
                                     self.conversations[cid][2].append(message)
+                        else:
+                            break
             try:
                 message = conversation[-1]
                 message = hash('%s %s' % (message[2].text, message[1].text)) # hash('time message')
