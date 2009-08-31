@@ -1,0 +1,13 @@
+I created this in regards to another project (related to Google Voice) that I am working on.
+However, it would seem that a Google Voice binding (done in Python) already exists that
+not only matches but exceeds current features. Although I had intended on introducing most
+of said features and had a similar coding style in mind, I see no point in simply duplicating
+their code.
+
+The project I am referencing is called pygooglevoice and can be found at
+http://code.google.com/p/pygooglevoice/. See my blog for more information at
+http://www.mschade.me/.
+
+Thank you,
+Michael Schade
+http://www.mschade.me/
