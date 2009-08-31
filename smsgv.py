@@ -322,6 +322,7 @@ class GVConversation(object):
         return locals()
         
     
+    @Property
     def deleted():
         doc = ''
         
