@@ -10,6 +10,7 @@ SMSLIST_URL     = ('https://www.google.com/voice/inbox/recent/sms',
 # POST
 ARCHIVE_URL     = 'https://www.google.com/voice/inbox/archiveMessages/'
 DELETE_URL      = 'https://www.google.com/voice/inbox/deleteMessages/'
+DELETE_FOREVER  = 'https://www.google.com/voice/inbox/deleteForeverMessages/'
 SPAM_URL        = 'https://www.google.com/voice/inbox/spam/'
 STAR_URL        = 'https://www.google.com/voice/inbox/star/'
 
@@ -123,34 +124,43 @@ class GVAccount:
                 # found. This is used when later detecting new messages.
                 if int(conversation_data['startTime']) > self.last_time:
                     self.temp_time = conversation_data['startTime']
-                    if 'spam' in conversation_data['labels']:
-                        spam = True
-                    else:
-                        spam = False
                     if conversation_data['id'] in self.conversations:
                         self.conversations[conversation_data['id']].reset_messages()
-                        if self.conversations[conversation_data['id']].spam != spam:
-                            self.conversations[conversation_data['id']].spam = spam
+                        if self.conversations[conversation_data['id']].note != conversation_data['note']:
+                            self.conversations[conversation_data['id']].note = conversation_data['note']
+                        if self.conversations[conversation_data['id']].read != conversation_data['isRead']:
+                            self.conversations[conversation_data['id']].read = conversation_data['isRead']
+                        if self.conversations[conversation_data['id']].spam != conversation_data['isSpam']:
+                            self.conversations[conversation_data['id']].spam = conversation_data['isSpam']
+                        if self.conversations[conversation_data['id']].trash != conversation_data['isTrash']:
+                            self.conversations[conversation_data['id']].trash = conversation_data['isTrash']
+                        if self.conversations[conversation_data['id']].star != conversation_data['star']:
+                            self.conversations[conversation_data['id']].star = conversation_data['star']
                     else:
                         self.conversations[conversation_data['id']] = GVConversation(self,
                             conversation_data['id'],
                             conversation_data['phoneNumber'],
                             conversation_data['displayNumber'],
-                            spam)
+                            conversation_data['note'],
+                            conversation_data['isRead'],
+                            conversation_data['isSpam'],
+                            conversation_data['isTrash'],
+                            conversation_data['star'])
         if self.temp_time == 0:
             self.temp_time = self.last_time
     
     def __check_conversations   (self, sms_list, page='inbox'):
-        for cid in self.conversations.keys():
+        for cid in self.conversations.iterkeys():
             # Traverses down the DOM to get to the proper div that contains all of the SMS data
             # The -1 brings us to the end to retrieve the very last message.
             try:
-                conversation_data = sms_list.find_class('gc-message')[0].getparent()
-                conversation_data = conversation_data.get_element_by_id(cid).find_class('gc-message-message-display')[-1]
+                conversation_data = sms_list.find_class('gc-message')[0].getparent().get_element_by_id(cid).find_class('gc-message-message-display')[-1]
             except KeyError:
                 if (self.conversations[cid].spam and page == 'spam') \
                   or (not self.conversations[cid].spam and page != 'spam'):
                     del self.conversations[cid]
+            except IndexError:
+                pass # Happens because of an empty page
             else:
                 self.conversations[cid].find_messages(conversation_data)
     
@@ -179,14 +189,17 @@ class GVAccount:
 
 class GVConversation:
     """Holds metadata and messages for a given text-message conversation."""
-    def __init__(self, account, id, number, display, spam=False):
+    def __init__(self, account, id, number, display, note, read, spam, trash, star):
         self.account        = account       # Relates back to the Google Voice account
         self.id             = id            # Conversation id used by Google
         self.number         = str(number)   # +15555555555 version of phone number
         self.display        = display       # Display number/name (provided by Google)
+        self.note           = note
+        self.read           = read
         self.spam           = spam
+        self.trash          = trash
+        self.star           = star
         self.hash           = None          # Hash of last conversation
-        self.hash_count     = 0
         self.first_check    = True          # First time checking for text messages?
         self.messages       = []            # Stores all GVMessage objects
     
@@ -206,16 +219,14 @@ class GVConversation:
         message_count = len(conversation) - 1
         if len(conversation) > 2 and conversation[2].get('class') == 'gc-message-sms-old': # Google has some messages hidden
             message_count   += len(conversation[2]) - 1
-            count           =  message_count + 3
             message_count   =  [0, 1, range(message_count-3), 4] # Preset list styling when Google hides some SMSes.
         else:
-            count           = message_count
             message_count   = range(message_count+1)
         found_unread        = False # Used to detect if last unread message has yet been found.
-        def build_hash(message, count=self.hash_count):
+        def build_hash(message):
             # hash('time message')
             """Builds a unique hash of the message/time combination and count."""
-            return hash('%d%s%s' % (count, message[2].text, message[1].text))
+            return hash('%s%s' % (message[2].text, message[1].text))
         def add_message(message):
             """Adds a message object to the class' list of Message objects."""
             if message[0].text.strip() != 'Me:':
@@ -224,7 +235,7 @@ class GVConversation:
         while not found_unread:
             for mid in message_count:
                 if self.hash == None: # Must set the hash first /only/ if none already set.
-                    self.hash = build_hash(conversation[-1], count)
+                    self.hash = build_hash(conversation[-1])
                 if type(mid) is type([]) and not found_unread:
                     for second_mid in mid:
                         if not found_unread:
@@ -254,22 +265,26 @@ class GVConversation:
     def mark_read       (self):
         """Mark conversation as read via a simple HTTP request."""
         _simple_get('%s' % (READ_URL + self.id))
+        self.read = True
     
     def unmark_read     (self):
         """Mark conversation as unread via a simple HTTP request."""
         _simple_get('%s' % (UNREAD_URL + self.id))
+        self.read = False
     
     def mark_star       (self):
         _simple_post(self.account.id, STAR_URL, {
             'messages': self.id,
             'star':     1,
         })
+        self.star = True
     
     def unmark_star     (self):
         _simple_post(self.account.id, STAR_URL, {
             'messages': self.id,
             'star':     0,
         })
+        self.star = False
     
     def archive         (self):
         """Archive conversation via a simple HTTP request."""
@@ -293,7 +308,22 @@ class GVConversation:
             'messages': self.id,
             'trash':    1,
         })
-        del self.account.conversations[self.id]
+        self.trash = True
+    
+    def undelete        (self):
+        _simple_post(self.account.id, DELETE_URL, {
+            'messages': self.id,
+            'trash':    0,
+        })
+        self.trash = False
+        # del self.account.conversations[self.id]
+    
+    def delete_forever  (self):
+        if self.trash or self.spam:
+            _simple_post(self.account.id, DELETE_FOREVER_URL, {
+                'messages': self.id,
+            })
+            del self.account.conversations[self.id]
     
     def mark_spam       (self):
         _simple_post(self.account.id, SPAM_URL, {
