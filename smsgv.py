@@ -100,8 +100,9 @@ class GVAccount(object):
         self.conversations  = {}
     
     def send_sms                (self, number, message):
+        """Sends a text message (SMS) to any supplied number."""
         if self.logged_in:
-            _simple_post(self.id, self.id, SEND_SMS_URL, {
+            _simple_post(self.id, SEND_SMS_URL, {
                 'number':   number,
                 'smstext':  message,
             })
@@ -138,10 +139,10 @@ class GVAccount(object):
                             self.conversations[conversation_data['id']].read = conversation_data['isRead']
                         if self.conversations[conversation_data['id']].spam != conversation_data['isSpam']:
                             self.conversations[conversation_data['id']].spam = conversation_data['isSpam']
-                        if self.conversations[conversation_data['id']].trash != conversation_data['isTrash']:
-                            self.conversations[conversation_data['id']].trash = conversation_data['isTrash']
-                        if self.conversations[conversation_data['id']].star != conversation_data['star']:
-                            self.conversations[conversation_data['id']].star = conversation_data['star']
+                        if self.conversations[conversation_data['id']].deleted != conversation_data['isTrash']:
+                            self.conversations[conversation_data['id']].deleted = conversation_data['isTrash']
+                        if self.conversations[conversation_data['id']].starred != conversation_data['star']:
+                            self.conversations[conversation_data['id']].starred = conversation_data['star']
                     else:
                         self.conversations[conversation_data['id']] = GVConversation(self,
                             conversation_data['id'],
