@@ -27,7 +27,6 @@ def _simple_post(id, url, data):
     from urllib import urlencode
     data['_rnr_se'] = id
     data = urlencode(data)
-    print data
     urlopen(Request(url, data, {'Content-type': 'application/x-www-form-urlencoded'}))
 
 def _simple_get(url):
@@ -187,6 +186,7 @@ class GVConversation:
         self.display        = display       # Display number/name (provided by Google)
         self.spam           = spam
         self.hash           = None          # Hash of last conversation
+        self.hash_count     = 0
         self.first_check    = True          # First time checking for text messages?
         self.messages       = []            # Stores all GVMessage objects
     
@@ -197,8 +197,8 @@ class GVConversation:
         self.account.send_sms(self.number, message)
     
     def reset_messages  (self):
-        if not self.first_check:
-            self.first_check = True
+        if self.first_check:
+            self.first_check = False
         self.messages   = []
     
     def find_messages   (self, conversation):
@@ -206,16 +206,16 @@ class GVConversation:
         message_count = len(conversation) - 1
         if len(conversation) > 2 and conversation[2].get('class') == 'gc-message-sms-old': # Google has some messages hidden
             message_count   += len(conversation[2]) - 1
+            count           =  message_count + 3
             message_count   =  [0, 1, range(message_count-3), 4] # Preset list styling when Google hides some SMSes.
-            count           =  len(message_count[2])+3
         else:
+            count           = message_count
             message_count   = range(message_count+1)
-            count           = len(message_count)
         found_unread        = False # Used to detect if last unread message has yet been found.
-        def build_hash(message):
+        def build_hash(message, count=self.hash_count):
             # hash('time message')
             """Builds a unique hash of the message/time combination and count."""
-            return hash('%s%s' % (message[2].text, message[1].text))
+            return hash('%d%s%s' % (count, message[2].text, message[1].text))
         def add_message(message):
             """Adds a message object to the class' list of Message objects."""
             if message[0].text.strip() != 'Me:':
@@ -224,14 +224,14 @@ class GVConversation:
         while not found_unread:
             for mid in message_count:
                 if self.hash == None: # Must set the hash first /only/ if none already set.
-                    self.hash = build_hash(conversation[-1])
+                    self.hash = build_hash(conversation[-1], count)
                 if type(mid) is type([]) and not found_unread:
                     for second_mid in mid:
                         if not found_unread:
                             message = conversation[2][-(second_mid+1)]
                             if self.hash == build_hash(message):
                                 found_unread = True
-                                if not self.first_check:
+                                if self.first_check and self.account.initialized:
                                     add_message(message)
                             else:
                                 add_message(message)
@@ -239,7 +239,7 @@ class GVConversation:
                     message = conversation[-(mid+1)]
                     if self.hash == build_hash(message):
                         found_unread = True
-                        if not self.first_check:
+                        if self.first_check and self.account.initialized:
                             add_message(message)
                     else:
                         add_message(message)
@@ -293,7 +293,7 @@ class GVConversation:
             'messages': self.id,
             'trash':    1,
         })
-        del self
+        del self.account.conversations[self.id]
     
     def mark_spam       (self):
         _simple_post(self.account.id, SPAM_URL, {
@@ -340,9 +340,13 @@ class GVUtil:
             if len(conversation.messages) > 0:
                 if not display:
                     display = True
-                print '  %s' % ''.join(['-' for i in range(len(conversation.display) + len(conversation.number) + 4)])
-                print '  %s:' % conversation
-                print '  %s' % ''.join(['-' for i in range(len(conversation.display) + len(conversation.number) + 4)])
+                if conversation.spam:
+                    spam_display = ''
+                else:
+                    spam_display = 'Not '
+                print '  %s' % ''.join(['-' for i in range(len(conversation.display) + len(conversation.number) + 14)])
+                print '  %s, %sSpam:' % (conversation, spam_display)
+                print '  %s' % ''.join(['-' for i in range(len(conversation.display) + len(conversation.number) + 14)])
                 for message in conversation.messages:
                     print '  %s' % message
         if not display:
