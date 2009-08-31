@@ -4,9 +4,13 @@ SEND_SMS_URL    = 'https://www.google.com/voice/m/sendsms'
 READ_URL        = 'https://www.google.com/voice/m/mark?read=1&id='
 UNREAD_URL      = 'https://www.google.com/voice/m/mark?read=0&id='
 SMSLIST_M_URL   = 'https://www.google.com/voice/m/i/sms'
-ARCHIVE_URL     = 'https://www.google.com/voice/m/archive?id='
 # We use the main website (instead of mobile) because Google includes helpful data stored via JSON here
 SMSLIST_URL     = 'https://www.google.com/voice/inbox/recent/sms'
+# POST
+ARCHIVE_URL     = 'https://www.google.com/voice/inbox/archiveMessages/'
+DELETE_URL      = 'https://www.google.com/voice/inbox/deleteMessages/'
+SPAM_URL        = 'https://www.google.com/voice/inbox/spam/'
+STAR_URL        = 'https://www.google.com/voice/inbox/star/'
 
 # Todo: Add multiple pages of messages support
 
@@ -15,6 +19,20 @@ class NotLoggedIn(Exception):
         self.username = str(username)
     def __str__(self):
         return self.username
+
+def _simple_post(id, url, data):
+    """POSTS data to Google's httpd to perform action."""
+    from urllib2 import Request, urlopen
+    from urllib import urlencode
+    data['_rnr_se'] = id
+    data = urlencode(data)
+    print data
+    urlopen(Request(url, data, {'Content-type': 'application/x-www-form-urlencoded'}))
+
+def _simple_get(url):
+    """Makes GET request to Google's httpd to perform action."""
+    from urllib2 import Request, urlopen
+    urlopen(Request(url))
 
 class GVAccount:
     """Handles account-related functions of Google Voice for smsGV."""
@@ -27,6 +45,7 @@ class GVAccount:
         # TODO: Evaluate possibility of cookie_jar.save() and .load() to add failsafe in case of need to 'relogin'
         self.logged_in      = False
         self.last_time      = 0
+        self.temp_time      = 0
         self.initialized    = False
         self.conversations  = {}
         self.login(password)
@@ -75,14 +94,10 @@ class GVAccount:
     
     def send_sms                (self, number, message):
         if self.logged_in:
-            from urllib2 import Request, urlopen
-            from urllib import urlencode
-            form = urlencode({
-                'number': number,
-                'smstext': message,
-                '_rnr_se': self.id,
+            _simple_post(self.id, self.id, SEND_SMS_URL, {
+                'number':   number,
+                'smstext':  message,
             })
-            urlopen(Request(SEND_SMS_URL, form, {'Content-type': 'application/x-www-form-urlencoded'}))
         else:
             raise NotLoggedIn(self.username)
     
@@ -102,7 +117,7 @@ class GVAccount:
             #   - Message is within the past 24 hours (86,400 seconds)
             if (time() - conversation_data['startTime'] < 86400) \
                and ('sms' in conversation_data['labels']) \
-               and ('inbox' in conversation_data['labels']):
+               and ('inbox' in conversation_data['labels']): # TODO: Support spam/archive
                 # If not initialized, then the -very- last message sent is
                 # found. This is used when later detecting new messages.
                 if int(conversation_data['startTime']) > self.last_time:
@@ -147,11 +162,12 @@ class GVAccount:
 
 class GVConversation:
     """Holds metadata and messages for a given text-message conversation."""
-    def __init__(self, account, id, number, display):
+    def __init__(self, account, id, number, display, spam=False):
         self.account        = account       # Relates back to the Google Voice account
         self.id             = id            # Conversation id used by Google
         self.number         = str(number)   # +15555555555 version of phone number
         self.display        = display       # Display number/name (provided by Google)
+        # self.spam           = spam
         self.hash           = None          # Hash of last conversation
         self.first_check    = True          # First time checking for text messages?
         self.messages       = []            # Stores all GVMessage objects
@@ -217,23 +233,66 @@ class GVConversation:
             pass
         # The above substrings are simply for proper formatting right now.
     
-    def __simple_request(self, url):
-        """Makes GET request to Google's httpd to perform action."""
-        from urllib2 import Request, urlopen
-        urlopen(Request(url))
+    def mark_spam       (self):
+        _simple_post(self.account.id, SPAM_URL, {
+            'messages': self.id,
+            'spam':     1,
+        })
+        # self.spam = True
+        del self.account.conversations[self.id]
+    
+    def unmark_spam     (self): # Not currently able to get spammed messages to do so,
+        # preparing for said functionality
+        _simple_post(self.account.id, SPAM_URL, {
+            'messages': self.id,
+            'spam':     0,
+        })
+        self.spam = False
+    
+    def mark_star       (self):
+        _simple_post(self.account.id, STAR_URL, {
+            'messages': self.id,
+            'star':     1,
+        })
+    
+    def unmark_star     (self):
+        _simple_post(self.account.id, STAR_URL, {
+            'messages': self.id,
+            'star':     0,
+        })
+    
+    def delete          (self):
+        _simple_post(self.account.id, DELETE_URL, {
+            'messages': self.id,
+            'trash':    1,
+        })
+        del self
     
     def archive         (self):
         """Archive conversation via a simple HTTP request."""
-        self.__simple_request('%s' % (ARCHIVE_URL + self.id))
-        del self
+        _simple_post(self.account.id, ARCHIVE_URL, {
+            'messages': self.id,
+            'archive':  1,
+        })
+        del self.account.conversations[self.id] # Because supporting unarchived
+        # messages is not yet supported
+    
+    def unarchive       (self): # Not currently able to get archived messages to do so,
+    # preparing for said functionality
+        """Archive conversation via a simple HTTP request."""
+        _simple_post(self.account.id, ARCHIVE_URL, {
+            'messages': self.id,
+            'archive':  0,
+        })
     
     def mark_read       (self):
         """Mark conversation as read via a simple HTTP request."""
-        self.__simple_request('%s' % (READ_URL + self.id))
+        _simple_get('%s' % (READ_URL + self.id))
     
-    def mark_unread     (self):
+    def unmark_read     (self):
         """Mark conversation as unread via a simple HTTP request."""
-        self.__simple_request('%s' % (UNREAD_URL + self.id))
+        _simple_get('%s' % (UNREAD_URL + self.id))
+    
 
 class GVMessage:
     """Holds details for each individual text message."""
