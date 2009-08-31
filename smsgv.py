@@ -1,6 +1,45 @@
-# Licensed under the MIT License.
-# Michael Schade (www.mschade.me)
-# 2009
+__author__		= 'Michael Schade'
+__email__		= 'michaelaschade@gmail.com',
+__website__     = 'http://www.mschade.me/'
+__copyright__	= 'Copyright 2009 Michael Schade'
+__credits__		= ['Michael Schade']
+__license__		= 'The MIT License'
+__version__		= '0.1'
+__doc__         = """
+py-smsgv:\t%(__copyright__)s
+Version:\t%(__version__)s
+
+Originally this was written as a way to interface
+the internal Google Voice API in order to (as my
+purposes mainly include) mainly retrieve latest
+SMS messages. Though, in addition, I had planned
+to add other features such as call forwarding,
+retrieving voicemails, local numbers, etc.
+
+However, it became apparent to me that someone
+else coded something in a similar fashion with
+the exact same features. Their project is called
+PyGoogleVoice and is located at
+http://code.google.com/p/pygooglevoice/. Since
+their code is better tested, has had more time
+poured into it, and is more full-featured, I have
+discontinued this project at its early stage and
+instead recommend using PyGoogleVoice.
+
+I had fun coding this, learned a little bit (such
+as cjson's efficiency over other json implementations),
+and plan now to move on to the personal project of
+mine that inspired using this in the first place.
+Instead, though, I will make use of PyGoogleVoice
+in my project rather than my own implementation.
+
+Thank you,
+%(__credits__)s - %(__website__)s
+%(__email__)s
+"""
+# Thanks to PyGoogleVoice (http://code.google.com/p/pygooglevoice/)
+# for idea of using variables such as those provided for proper
+# doc string data about code.
 
 # We use the mobile website for everything possible to save on bandwidth
 MAIN_BASE       = 'https://www.google.com/voice/inbox/'
