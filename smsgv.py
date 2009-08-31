@@ -269,15 +269,23 @@ class GVConversation(object):
         # The above substrings are simply for proper formatting right now.
     
     # Read
-    def mark_read       (self):
-        """Mark conversation as read via a simple HTTP request."""
-        _simple_get('%s' % (READ_URL + self.id))
-        self.__read = True
-    
-    def unmark_read     (self):
-        """Mark conversation as unread via a simple HTTP request."""
-        _simple_get('%s' % (UNREAD_URL + self.id))
-        self.__read = False
+    @Property
+    def read():
+        doc = ''
+        
+        def fget(self):
+            return self.__read
+        
+        def fset(self, is_read):
+            """Mark conversation as unread via a simple HTTP request."""
+            if is_read:
+                url = READ_URL
+            else:
+                url = UNREAD_URL
+            _simple_get('%s' % (url + self.id))
+            self.__read = int(is_read)
+        
+        return locals()
     
     # Star
     def mark_star       (self):
@@ -295,38 +303,40 @@ class GVConversation(object):
         self.__star = False
     
     # Archive
-    def archive         (self):
-        """Archive conversation via a simple HTTP request."""
-        _simple_post(self.account.id, ARCHIVE_URL, {
-            'messages': self.id,
-            'archive':  1,
-        })
-        del self.account.conversations[self.id] # Because supporting unarchived
-        # messages is not yet supported
-    
-    def unarchive       (self): # Not currently able to get archived messages to do so,
-    # preparing for said functionality
-        """Archive conversation via a simple HTTP request."""
-        _simple_post(self.account.id, ARCHIVE_URL, {
-            'messages': self.id,
-            'archive':  0,
-        })
+    @Property
+    def archive():
+        doc = ''
+        
+        def fget(self):
+            pass
+            # return self.__archived
+        
+        def fset(self, is_archived):
+            """Archive conversation via a simple HTTP request."""
+            _simple_post(self.account.id, ARCHIVE_URL, {
+                'messages': self.id,
+                'archive':  int(is_archived)
+            })
+            #del self.account.conversations[self.id]
+        
+        return locals()
+        
     
     # Conversation Deletion
-    def delete          (self):
-        _simple_post(self.account.id, DELETE_URL, {
-            'messages': self.id,
-            'trash':    1,
-        })
-        self.__trash = True
-    
-    def undelete        (self):
-        _simple_post(self.account.id, DELETE_URL, {
-            'messages': self.id,
-            'trash':    0,
-        })
-        self.__trash = False
-        # del self.account.conversations[self.id]
+    def deleted():
+        doc = ''
+        
+        def fget(self):
+            return self.__trash
+        
+        def fset(self, is_deleted):
+            _simple_post(self.account.id, DELETE_URL, {
+                'messages': self.id,
+                'trash':    int(is_deleted),
+            })
+            self.__trash = int(is_deleted)
+        
+        return locals()
     
     def delete_forever  (self):
         if self.__trash or self.__spam:
@@ -347,9 +357,9 @@ class GVConversation(object):
             # preparing for said functionality
             _simple_post(self.account.id, SPAM_URL, {
                 'messages': self.id,
-                'spam':     1 if is_spam else 0,
+                'spam':     int(is_spam)
             })
-            self.__spam = 1 if is_spam else 0
+            self.__spam     = int(is_spam)
         
         return locals()
     
