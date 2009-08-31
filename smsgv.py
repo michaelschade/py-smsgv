@@ -5,7 +5,8 @@ READ_URL        = 'https://www.google.com/voice/m/mark?read=1&id='
 UNREAD_URL      = 'https://www.google.com/voice/m/mark?read=0&id='
 SMSLIST_M_URL   = 'https://www.google.com/voice/m/i/sms'
 # We use the main website (instead of mobile) because Google includes helpful data stored via JSON here
-SMSLIST_URL     = 'https://www.google.com/voice/inbox/recent/sms'
+SMSLIST_URL     = ('https://www.google.com/voice/inbox/recent/sms',
+                   'https://www.google.com/voice/inbox/recent/spam/')
 # POST
 ARCHIVE_URL     = 'https://www.google.com/voice/inbox/archiveMessages/'
 DELETE_URL      = 'https://www.google.com/voice/inbox/deleteMessages/'
@@ -116,46 +117,63 @@ class GVAccount:
             #   - Message is unread
             #   - Message is within the past 24 hours (86,400 seconds)
             if (time() - conversation_data['startTime'] < 86400) \
-               and ('sms' in conversation_data['labels']) \
-               and ('inbox' in conversation_data['labels']): # TODO: Support spam/archive
+               and (('sms' in conversation_data['labels'] \
+                    and 'inbox' in conversation_data['labels']) \
+                    or ('spam' in conversation_data['labels'])): # TODO: Support spam/archive
                 # If not initialized, then the -very- last message sent is
                 # found. This is used when later detecting new messages.
                 if int(conversation_data['startTime']) > self.last_time:
                     self.temp_time = conversation_data['startTime']
+                    if 'spam' in conversation_data['labels']:
+                        spam = True
+                    else:
+                        spam = False
                     if conversation_data['id'] in self.conversations:
                         self.conversations[conversation_data['id']].reset_messages()
+                        if self.conversations[conversation_data['id']].spam != spam:
+                            self.conversations[conversation_data['id']].spam = spam
                     else:
                         self.conversations[conversation_data['id']] = GVConversation(self,
                             conversation_data['id'],
                             conversation_data['phoneNumber'],
-                            conversation_data['displayNumber'])
+                            conversation_data['displayNumber'],
+                            spam)
         if self.temp_time == 0:
             self.temp_time = self.last_time
     
-    def __check_conversations   (self, sms_list):
-        for cid in self.conversations.iterkeys():
+    def __check_conversations   (self, sms_list, page='inbox'):
+        for cid in self.conversations.keys():
             # Traverses down the DOM to get to the proper div that contains all of the SMS data
             # The -1 brings us to the end to retrieve the very last message.
             try:
                 conversation_data = sms_list.find_class('gc-message')[0].getparent()
                 conversation_data = conversation_data.get_element_by_id(cid).find_class('gc-message-message-display')[-1]
             except KeyError:
-                del self.conversations[cid]
+                if (self.conversations[cid].spam and page == 'spam') \
+                  or (not self.conversations[cid].spam and page != 'spam'):
+                    del self.conversations[cid]
             else:
                 self.conversations[cid].find_messages(conversation_data)
+    
+    def __get_page(self, url):
+        from urllib2 import Request, urlopen
+        sms_list = urlopen(Request(url))
+        from lxml import html
+        # Strip CDATA tags
+        sms_list = sms_list.read()
+        sms_list = sms_list.replace('<![CDATA[', '').replace(']]>', '')
+        sms_list = html.document_fromstring(sms_list)
+        return sms_list
     
     def check_sms(self):
         """Retrieves the SMS messages from Google's servers to pass to the Parse function."""
         if self.logged_in:
-            from urllib2 import Request, urlopen
-            sms_list = urlopen(Request(SMSLIST_URL))
-            from lxml import html
-            # Strip CDATA tags
-            sms_list = sms_list.read()
-            sms_list = sms_list.replace('<![CDATA[', '').replace(']]>', '')
-            sms_list = html.document_fromstring(sms_list)
-            self.__find_conversations (sms_list)
-            self.__check_conversations(sms_list)
+            sms_list_inbox  = self.__get_page(SMSLIST_URL[0])
+            sms_list_spam   = self.__get_page(SMSLIST_URL[1])
+            self.__find_conversations (sms_list_inbox)
+            self.__check_conversations(sms_list_inbox)
+            self.__find_conversations (sms_list_spam)
+            self.__check_conversations(sms_list_spam, 'spam')
         else:
             raise NotLoggedIn(self.username)
     
@@ -167,7 +185,7 @@ class GVConversation:
         self.id             = id            # Conversation id used by Google
         self.number         = str(number)   # +15555555555 version of phone number
         self.display        = display       # Display number/name (provided by Google)
-        # self.spam           = spam
+        self.spam           = spam
         self.hash           = None          # Hash of last conversation
         self.first_check    = True          # First time checking for text messages?
         self.messages       = []            # Stores all GVMessage objects
@@ -233,21 +251,13 @@ class GVConversation:
             pass
         # The above substrings are simply for proper formatting right now.
     
-    def mark_spam       (self):
-        _simple_post(self.account.id, SPAM_URL, {
-            'messages': self.id,
-            'spam':     1,
-        })
-        # self.spam = True
-        del self.account.conversations[self.id]
+    def mark_read       (self):
+        """Mark conversation as read via a simple HTTP request."""
+        _simple_get('%s' % (READ_URL + self.id))
     
-    def unmark_spam     (self): # Not currently able to get spammed messages to do so,
-        # preparing for said functionality
-        _simple_post(self.account.id, SPAM_URL, {
-            'messages': self.id,
-            'spam':     0,
-        })
-        self.spam = False
+    def unmark_read     (self):
+        """Mark conversation as unread via a simple HTTP request."""
+        _simple_get('%s' % (UNREAD_URL + self.id))
     
     def mark_star       (self):
         _simple_post(self.account.id, STAR_URL, {
@@ -260,13 +270,6 @@ class GVConversation:
             'messages': self.id,
             'star':     0,
         })
-    
-    def delete          (self):
-        _simple_post(self.account.id, DELETE_URL, {
-            'messages': self.id,
-            'trash':    1,
-        })
-        del self
     
     def archive         (self):
         """Archive conversation via a simple HTTP request."""
@@ -285,13 +288,28 @@ class GVConversation:
             'archive':  0,
         })
     
-    def mark_read       (self):
-        """Mark conversation as read via a simple HTTP request."""
-        _simple_get('%s' % (READ_URL + self.id))
+    def delete          (self):
+        _simple_post(self.account.id, DELETE_URL, {
+            'messages': self.id,
+            'trash':    1,
+        })
+        del self
     
-    def unmark_read     (self):
-        """Mark conversation as unread via a simple HTTP request."""
-        _simple_get('%s' % (UNREAD_URL + self.id))
+    def mark_spam       (self):
+        _simple_post(self.account.id, SPAM_URL, {
+            'messages': self.id,
+            'spam':     1,
+        })
+        self.spam = True
+        del self.account.conversations[self.id]
+    
+    def unmark_spam     (self): # Not currently able to get spammed messages to do so,
+        # preparing for said functionality
+        _simple_post(self.account.id, SPAM_URL, {
+            'messages': self.id,
+            'spam':     0,
+        })
+        self.spam = False
     
 
 class GVMessage:
@@ -307,6 +325,7 @@ class GVMessage:
     def __str__(self):
         from time import strftime
         return '%s:\t%s' % (strftime('%H:%M', self.time), self.message)
+    
 
 class GVUtil:
     """Useful testing-related/user-accessible functions not crucial to smsGV operation."""
