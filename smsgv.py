@@ -12,6 +12,8 @@ ARCHIVE_URL     = 'https://www.google.com/voice/inbox/archiveMessages/'
 DELETE_URL      = 'https://www.google.com/voice/inbox/deleteMessages/'
 DELETE_FOREVER  = 'https://www.google.com/voice/inbox/deleteForeverMessages/'
 SPAM_URL        = 'https://www.google.com/voice/inbox/spam/'
+NOTE_URL        = 'https://www.google.com/voice/inbox/savenote/'
+DELETE_NOTE_URL = 'https://www.google.com/voice/inbox/deletenote/'
 STAR_URL        = 'https://www.google.com/voice/inbox/star/'
 
 # Todo: Add multiple pages of messages support
@@ -340,6 +342,19 @@ class GVConversation:
             'spam':     0,
         })
         self.spam = False
+    
+    def set_note        (self, message):
+        _simple_post(self.account.id, NOTE_URL, {
+            'id':   self.id,
+            'note': message,
+        })
+        self.note = message
+    
+    def delete_note     (self):
+        _simple_post(self.account.id, DELETE_NOTE_URL, {
+            'id':   self.id,
+        })
+        self.note = ''
     
 
 class GVMessage:
