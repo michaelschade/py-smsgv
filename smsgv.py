@@ -268,7 +268,6 @@ class GVConversation(object):
             pass
         # The above substrings are simply for proper formatting right now.
     
-    # Read
     @Property
     def read():
         doc = ''
@@ -287,24 +286,25 @@ class GVConversation(object):
         
         return locals()
     
-    # Star
-    def mark_star       (self):
-        _simple_post(self.account.id, STAR_URL, {
-            'messages': self.id,
-            'star':     1,
-        })
-        self.__star = True
-    
-    def unmark_star     (self):
-        _simple_post(self.account.id, STAR_URL, {
-            'messages': self.id,
-            'star':     0,
-        })
-        self.__star = False
-    
-    # Archive
     @Property
-    def archive():
+    def starred():
+        doc = ''
+        
+        def fget(self):
+            return self.__star
+        
+        def fset(self, is_starred):
+            _simple_post(self.account.id, STAR_URL, {
+                'messages': self.id,
+                'star':     int(is_starred),
+            })
+            self.__star = int(is_starred)
+        
+        return locals()
+        
+    
+    @Property
+    def archived():
         doc = ''
         
         def fget(self):
@@ -322,7 +322,6 @@ class GVConversation(object):
         return locals()
         
     
-    # Conversation Deletion
     def deleted():
         doc = ''
         
@@ -345,7 +344,6 @@ class GVConversation(object):
             })
             del self.account.conversations[self.id]
     
-    # Spam
     @Property
     def spam():
         doc = ''
@@ -363,7 +361,6 @@ class GVConversation(object):
         
         return locals()
     
-    # Note
     @Property
     def note():
         doc = ''
