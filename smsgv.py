@@ -1,20 +1,27 @@
+# Licensed under the MIT License.
+# Michael Schade (www.mschade.me)
+# 2009
+
 # We use the mobile website for everything possible to save on bandwidth
-LOGIN_URL       = 'https://www.google.com/accounts/ServiceLoginAuth?service=grandcentral'
-SEND_SMS_URL    = 'https://www.google.com/voice/m/sendsms'
-READ_URL        = 'https://www.google.com/voice/m/mark?read=1&id='
-UNREAD_URL      = 'https://www.google.com/voice/m/mark?read=0&id='
-SMSLIST_M_URL   = 'https://www.google.com/voice/m/i/sms'
+MAIN_BASE       = 'https://www.google.com/voice/inbox/'
+MOBILE_BASE     = 'https://www.google.com/voice/m/'
+
+SEND_SMS_URL    = MOBILE_BASE + 'sendsms'
+READ_URL        = MOBILE_BASE + 'mark?read=1&id='
+UNREAD_URL      = MOBILE_BASE + 'mark?read=0&id='
+SMSLIST_M_URL   = MOBILE_BASE + 'i/sms'
 # We use the main website (instead of mobile) because Google includes helpful data stored via JSON here
-SMSLIST_URL     = ('https://www.google.com/voice/inbox/recent/sms',
-                   'https://www.google.com/voice/inbox/recent/spam/')
+LOGIN_URL       = 'https://www.google.com/accounts/ServiceLoginAuth?service=grandcentral'
+SMSLIST_URL     = (MAIN_BASE + 'recent/sms',
+                   MAIN_BASE + 'recent/spam/')
 # POST
-ARCHIVE_URL     = 'https://www.google.com/voice/inbox/archiveMessages/'
-DELETE_URL      = 'https://www.google.com/voice/inbox/deleteMessages/'
-DELETE_FOREVER  = 'https://www.google.com/voice/inbox/deleteForeverMessages/'
-SPAM_URL        = 'https://www.google.com/voice/inbox/spam/'
-NOTE_URL        = 'https://www.google.com/voice/inbox/savenote/'
-DELETE_NOTE_URL = 'https://www.google.com/voice/inbox/deletenote/'
-STAR_URL        = 'https://www.google.com/voice/inbox/star/'
+ARCHIVE_URL     = MAIN_BASE + 'archiveMessages/'
+DELETE_URL      = MAIN_BASE + 'deleteMessages/'
+DELETE_FOREVER  = MAIN_BASE + 'deleteForeverMessages/'
+SPAM_URL        = MAIN_BASE + 'spam/'
+NOTE_URL        = MAIN_BASE + 'savenote/'
+DELETE_NOTE_URL = MAIN_BASE + 'deletenote/'
+STAR_URL        = MAIN_BASE + 'star/'
 
 # Todo: Add multiple pages of messages support
 
@@ -100,7 +107,8 @@ class GVAccount(object):
         self.conversations  = {}
     
     def send_sms                (self, number, message):
-        """Sends a text message (SMS) to any supplied number."""
+        """Sends a text message (SMS) to any supplied number. Seems to bypass 2
+        message limit imposed by Google Voice's website. Please do not abuse this!"""
         if self.logged_in:
             _simple_post(self.id, SEND_SMS_URL, {
                 'number':   number,
@@ -393,6 +401,9 @@ class GVConversation(object):
 class GVMessage(object):
     """Holds details for each individual text message."""
     def __init__(self, time, message):
+        # If string provided for time, converted to a time object.
+        """Accepts time in format of %%I:%%M %%p (HH:MM AM/PM) or a time
+        object. Message limit """
         self.time       = time
         self.message    = message
         if type(self.time) is str:
@@ -425,7 +436,7 @@ class GVUtil(object):
                 print '  %s' % ''.join(['-' for i in range(len(conversation.display) + len(conversation.number) + 14)])
                 print '  %s, %sSpam:' % (conversation, spam_display)
                 print '  %s' % ''.join(['-' for i in range(len(conversation.display) + len(conversation.number) + 14)])
-                for message in conversation.messages:
+                for message in conversation.messages[::-1]:
                     print '  %s' % message
         if not display:
             print '  None'
