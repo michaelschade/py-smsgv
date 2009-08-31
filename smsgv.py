@@ -24,6 +24,10 @@ class NotLoggedIn(Exception):
     def __str__(self):
         return self.username
 
+def Property(func):
+    # Thanks to http://adam.gomaa.us/blog/2008/aug/11/the-python-property-builtin/
+    return property(**func())
+
 def _simple_post(id, url, data):
     """POSTS data to Google's httpd to perform action."""
     from urllib2 import Request, urlopen
@@ -37,7 +41,7 @@ def _simple_get(url):
     from urllib2 import Request, urlopen
     urlopen(Request(url))
 
-class GVAccount:
+class GVAccount(object):
     """Handles account-related functions of Google Voice for smsGV."""
     def __init__(self, username, password):
         self.id             = None
@@ -189,18 +193,18 @@ class GVAccount:
             raise NotLoggedIn(self.username)
     
 
-class GVConversation:
+class GVConversation(object):
     """Holds metadata and messages for a given text-message conversation."""
     def __init__(self, account, id, number, display, note, read, spam, trash, star):
         self.account        = account       # Relates back to the Google Voice account
         self.id             = id            # Conversation id used by Google
         self.number         = str(number)   # +15555555555 version of phone number
         self.display        = display       # Display number/name (provided by Google)
-        self.note           = note
-        self.read           = read
-        self.spam           = spam
-        self.trash          = trash
-        self.star           = star
+        self.__note           = note
+        self.__read           = read
+        self.__spam           = spam
+        self.__trash          = trash
+        self.__star           = star
         self.hash           = None          # Hash of last conversation
         self.first_check    = True          # First time checking for text messages?
         self.messages       = []            # Stores all GVMessage objects
@@ -264,30 +268,33 @@ class GVConversation:
             pass
         # The above substrings are simply for proper formatting right now.
     
+    # Read
     def mark_read       (self):
         """Mark conversation as read via a simple HTTP request."""
         _simple_get('%s' % (READ_URL + self.id))
-        self.read = True
+        self.__read = True
     
     def unmark_read     (self):
         """Mark conversation as unread via a simple HTTP request."""
         _simple_get('%s' % (UNREAD_URL + self.id))
-        self.read = False
+        self.__read = False
     
+    # Star
     def mark_star       (self):
         _simple_post(self.account.id, STAR_URL, {
             'messages': self.id,
             'star':     1,
         })
-        self.star = True
+        self.__star = True
     
     def unmark_star     (self):
         _simple_post(self.account.id, STAR_URL, {
             'messages': self.id,
             'star':     0,
         })
-        self.star = False
+        self.__star = False
     
+    # Archive
     def archive         (self):
         """Archive conversation via a simple HTTP request."""
         _simple_post(self.account.id, ARCHIVE_URL, {
@@ -305,59 +312,72 @@ class GVConversation:
             'archive':  0,
         })
     
+    # Conversation Deletion
     def delete          (self):
         _simple_post(self.account.id, DELETE_URL, {
             'messages': self.id,
             'trash':    1,
         })
-        self.trash = True
+        self.__trash = True
     
     def undelete        (self):
         _simple_post(self.account.id, DELETE_URL, {
             'messages': self.id,
             'trash':    0,
         })
-        self.trash = False
+        self.__trash = False
         # del self.account.conversations[self.id]
     
     def delete_forever  (self):
-        if self.trash or self.spam:
+        if self.__trash or self.__spam:
             _simple_post(self.account.id, DELETE_FOREVER_URL, {
                 'messages': self.id,
             })
             del self.account.conversations[self.id]
     
-    def mark_spam       (self):
-        _simple_post(self.account.id, SPAM_URL, {
-            'messages': self.id,
-            'spam':     1,
-        })
-        self.spam = True
-        del self.account.conversations[self.id]
+    # Spam
+    @Property
+    def spam():
+        doc = ''
+        
+        def fget(self):
+            return self.__spam
+        
+        def fset(self, is_spam): # Not currently able to get spammed messages to do so,
+            # preparing for said functionality
+            _simple_post(self.account.id, SPAM_URL, {
+                'messages': self.id,
+                'spam':     1 if is_spam else 0,
+            })
+            self.__spam = 1 if is_spam else 0
+        
+        return locals()
     
-    def unmark_spam     (self): # Not currently able to get spammed messages to do so,
-        # preparing for said functionality
-        _simple_post(self.account.id, SPAM_URL, {
-            'messages': self.id,
-            'spam':     0,
-        })
-        self.spam = False
-    
-    def set_note        (self, message):
-        _simple_post(self.account.id, NOTE_URL, {
-            'id':   self.id,
-            'note': message,
-        })
-        self.note = message
-    
-    def delete_note     (self):
-        _simple_post(self.account.id, DELETE_NOTE_URL, {
-            'id':   self.id,
-        })
-        self.note = ''
+    # Note
+    @Property
+    def note():
+        doc = ''
+        
+        def fget(self):
+            return self.note
+        
+        def fset(self, message):
+            _simple_post(self.account.id, NOTE_URL, {
+                'id':   self.id,
+                'note': message,
+            })
+            self.__note = message
+        
+        def fdel(self):
+            _simple_post(self.account.id, DELETE_NOTE_URL, {
+                'id':   self.id,
+            })
+            self.__note = ''
+        
+        return locals()
     
 
-class GVMessage:
+class GVMessage(object):
     """Holds details for each individual text message."""
     def __init__(self, time, message):
         self.time       = time
@@ -372,7 +392,7 @@ class GVMessage:
         return '%s:\t%s' % (strftime('%H:%M', self.time), self.message)
     
 
-class GVUtil:
+class GVUtil(object):
     """Useful testing-related/user-accessible functions not crucial to smsGV operation."""
     def __init__(self):
         pass
@@ -396,3 +416,4 @@ class GVUtil:
                     print '  %s' % message
         if not display:
             print '  None'
+    
