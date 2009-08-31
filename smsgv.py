@@ -270,7 +270,7 @@ class GVConversation(object):
     
     @Property
     def read():
-        doc = ''
+        doc = 'Marks or unmarks a conversation as read. Accepts boolean values.'
         
         def fget(self):
             return self.__read
@@ -288,7 +288,7 @@ class GVConversation(object):
     
     @Property
     def starred():
-        doc = ''
+        doc = 'Marks or unmarks a conversation as starred. Accepts boolean values.'
         
         def fget(self):
             return self.__star
@@ -301,11 +301,10 @@ class GVConversation(object):
             self.__star = int(is_starred)
         
         return locals()
-        
     
     @Property
     def archived():
-        doc = ''
+        doc = "(Un)archives a conversation on Google's servers. Accepts boolean values."
         
         def fget(self):
             pass
@@ -320,11 +319,10 @@ class GVConversation(object):
             #del self.account.conversations[self.id]
         
         return locals()
-        
     
     @Property
     def deleted():
-        doc = ''
+        doc = 'Moves a conversation to or from the trash. Accepts boolean values.'
         
         def fget(self):
             return self.__trash
@@ -338,7 +336,8 @@ class GVConversation(object):
         
         return locals()
     
-    def delete_forever  (self):
+    def delete_forever(self):
+        """Permanently deletes the conversation from Google's servers."""
         if self.__trash or self.__spam:
             _simple_post(self.account.id, DELETE_FOREVER_URL, {
                 'messages': self.id,
@@ -347,7 +346,7 @@ class GVConversation(object):
     
     @Property
     def spam():
-        doc = ''
+        doc = 'Marks or unmarks a conversation as spam. Accepts boolean values.'
         
         def fget(self):
             return self.__spam
@@ -364,7 +363,7 @@ class GVConversation(object):
     
     @Property
     def note():
-        doc = ''
+        doc = "Adds, changes, or deletes a conversation's note."
         
         def fget(self):
             return self.note
