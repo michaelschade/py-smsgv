@@ -131,7 +131,7 @@ class GVAccount(object):
                 if int(conversation_data['startTime']) > self.last_time:
                     self.temp_time = conversation_data['startTime']
                     if conversation_data['id'] in self.conversations:
-                        self.conversations[conversation_data['id']].reset_messages()
+                        self.conversations[conversation_data['id']].clear_local_messages()
                         if self.conversations[conversation_data['id']].note != conversation_data['note']:
                             self.conversations[conversation_data['id']].note = conversation_data['note']
                         if self.conversations[conversation_data['id']].read != conversation_data['isRead']:
@@ -213,14 +213,19 @@ class GVConversation(object):
         return '%s (%s)' % (self.display, self.number)
     
     def send_message    (self, message):
+        """Sends a text message (SMS) to the other party of the conversation."""
         self.account.send_sms(self.number, message)
     
-    def reset_messages  (self):
+    def clear_local_messages  (self):
+        """Removes all currently stored messages from the object's local storage."""
         if self.first_check:
             self.first_check = False
         self.messages   = []
     
     def find_messages   (self, conversation):
+        # Uses a hash of the latest message to help only retrieve the latest messages.
+        """Finds the latest messages for a given conversation. Only retrieves
+        messages not previously stored in the object."""
         from time import strftime, localtime
         message_count = len(conversation) - 1
         if len(conversation) > 2 and conversation[2].get('class') == 'gc-message-sms-old': # Google has some messages hidden
@@ -366,7 +371,7 @@ class GVConversation(object):
         doc = "Adds, changes, or deletes a conversation's note."
         
         def fget(self):
-            return self.note
+            return self.__note
         
         def fset(self, message):
             _simple_post(self.account.id, NOTE_URL, {
